@@ -50,15 +50,7 @@ async function generateDB(organization = {}, user = {}, key = []) {
 			_id: Crud.ObjectId().toString(),
 			type: "key",
 			key: uuid.generate(),
-			actions: {
-				object: {
-					"*": {
-						$array: {
-							files: true
-						}
-					}
-				}
-			}
+			admin: "true"
 		};
 
 		// Create role
