@@ -1,3 +1,11 @@
+## [1.30.1](https://github.com/CoCreate-app/CoCreate-organizations/compare/v1.30.0...v1.30.1) (2026-02-04)
+
+
+### Bug Fixes
+
+* update amin key ([2d92d4c](https://github.com/CoCreate-app/CoCreate-organizations/commit/2d92d4c18cb6cf3e79894f986e142fc7dcee51d2))
+* update worklow ([4c1dd50](https://github.com/CoCreate-app/CoCreate-organizations/commit/4c1dd50724a8eff8ea0052875eb5c7ffb28cd369))
+
 # [1.30.0](https://github.com/CoCreate-app/CoCreate-organizations/compare/v1.29.0...v1.30.0) (2025-09-20)
 
 
