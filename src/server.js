@@ -254,7 +254,6 @@ function init() {
     if (server && server.isInitialized && server.crud && server.wsManager) {
         server.wsManager.on("createOrganization", (data) => createOrganization(data));
         server.wsManager.on("createEnvironments", (data) => createEnvironments(data));
-        console.log('[@cocreate/organizations] Organization creation event bindings successfully established.');
     } else {
         // If the shared WebSocket manager has not yet populated, check again in 500ms
         setTimeout(init, 500);
