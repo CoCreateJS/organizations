@@ -1,3 +1,17 @@
+## [1.30.2](https://github.com/CoCreate-app/CoCreate-organizations/compare/v1.30.1...v1.30.2) (2026-07-14)
+
+
+### Bug Fixes
+
+* bump package versions ([5f537d5](https://github.com/CoCreate-app/CoCreate-organizations/commit/5f537d503b73450a82261b90f6c8d3c13823b991))
+* remove unnecessary console logs in init function for cleaner output ([a313733](https://github.com/CoCreate-app/CoCreate-organizations/commit/a313733c05bdd7e0acfdf340fd5d9606569585e1))
+* removed post install and add add packages to apprved list ([bfaaab9](https://github.com/CoCreate-app/CoCreate-organizations/commit/bfaaab9f43ebd206d381eb4f69f50a3e593b321d))
+* root factory variable Module ([efad9c8](https://github.com/CoCreate-app/CoCreate-organizations/commit/efad9c80ba24e1f23d0043d82b8430221c91a9e1))
+* root factory variable Module ([5d7adfe](https://github.com/CoCreate-app/CoCreate-organizations/commit/5d7adfed55c0babb462a01bef76d0392ef963f98))
+* semantic version handling ([d7db5e3](https://github.com/CoCreate-app/CoCreate-organizations/commit/d7db5e316322d36cba2a2b77f556db471d23b843))
+* update module export to ES6 syntax in release.config.js ([2fc0b31](https://github.com/CoCreate-app/CoCreate-organizations/commit/2fc0b312a4402c901ed6dd8050dfee513bf6e70d))
+* update package.json to use ESM and restructure server/client entry points ([4705c17](https://github.com/CoCreate-app/CoCreate-organizations/commit/4705c17f683add25d260912182884e7b4616bc61))
+
 ## [1.30.1](https://github.com/CoCreate-app/CoCreate-organizations/compare/v1.30.0...v1.30.1) (2026-02-04)
 
 
