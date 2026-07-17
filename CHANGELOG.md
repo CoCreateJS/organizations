@@ -1,3 +1,10 @@
+# [1.31.0](https://github.com/CoCreate-app/CoCreate-organizations/compare/v1.30.2...v1.31.0) (2026-07-17)
+
+
+### Features
+
+* update automated workflow and release configuration for improved semantic release handling ([e7006af](https://github.com/CoCreate-app/CoCreate-organizations/commit/e7006afb922df914e900f8226217319b141b0c97))
+
 ## [1.30.2](https://github.com/CoCreate-app/CoCreate-organizations/compare/v1.30.1...v1.30.2) (2026-07-14)
 
 
