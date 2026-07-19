@@ -1,3 +1,10 @@
+## [1.31.2](https://github.com/CoCreate-app/CoCreate-organizations/compare/v1.31.1...v1.31.2) (2026-07-19)
+
+
+### Bug Fixes
+
+* set default branch to main ([d81b22d](https://github.com/CoCreate-app/CoCreate-organizations/commit/d81b22d2ca5e6e6d5b306cc460cd1bf927c72335))
+
 ## [1.31.1](https://github.com/CoCreate-app/CoCreate-organizations/compare/v1.31.0...v1.31.1) (2026-07-17)
 
 
