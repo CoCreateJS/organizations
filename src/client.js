@@ -3,7 +3,7 @@ import Action from "@cocreate/actions";
 import Elements from "@cocreate/elements";
 import Config from "@cocreate/config";
 import Indexeddb from "@cocreate/indexeddb";
-import uuid from "@cocreate/uuid";
+import { uuid } from "@cocreate/utils";
 
 async function generateDB(organization = {}, user = {}, key = []) {
 	try {
@@ -20,7 +20,7 @@ async function generateDB(organization = {}, user = {}, key = []) {
 		let defaultKey = {
 			_id: Crud.ObjectId().toString(),
 			type: "key",
-			key: uuid.generate(),
+			key:  uuid(),
 			actions: {
 				object: {
 					"*": {
@@ -49,7 +49,7 @@ async function generateDB(organization = {}, user = {}, key = []) {
 		let fileKey = {
 			_id: Crud.ObjectId().toString(),
 			type: "key",
-			key: uuid.generate(),
+			key:  uuid(),
 			admin: "true"
 		};
 
