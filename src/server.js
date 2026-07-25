@@ -23,9 +23,6 @@
 
 import server from '@cocreate/server';
 
-// ==========================================
-// Module-Level Sandbox State (ESM Singleton Container)
-// ==========================================
 const platformSocket = {
     config: {
         organization_id: process.env.organization_id
