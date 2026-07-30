@@ -47,10 +47,10 @@
   },
   "dependencies": {
     "@cocreate/actions": "^1.23.0",
-    "@cocreate/config": "^1.16.0",
+    "@cocreate/config": "^1.17.0",
     "@cocreate/crud-client": "^1.36.0",
     "@cocreate/elements": "^1.44.0",
-    "@cocreate/server": "^1.7.0"
+    "@cocreate/server": "^1.8.0"
   },
   "devDependencies": {
     "@cocreate/webpack": "^1.7.0"
