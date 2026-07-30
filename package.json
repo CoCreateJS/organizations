@@ -46,14 +46,14 @@
     }
   },
   "dependencies": {
-    "@cocreate/actions": "^1.22.3",
-    "@cocreate/config": "^1.14.3",
-    "@cocreate/crud-client": "^1.35.2",
-    "@cocreate/elements": "^1.43.2",
+    "@cocreate/actions": "^1.23.0",
+    "@cocreate/config": "^1.16.0",
+    "@cocreate/crud-client": "^1.36.0",
+    "@cocreate/elements": "^1.44.0",
     "@cocreate/server": "^1.7.0"
   },
   "devDependencies": {
-    "@cocreate/webpack": "^1.6.2"
+    "@cocreate/webpack": "^1.7.0"
   },
   "allowScripts": {
     "@cocreate/actions@1.21.4": true,
