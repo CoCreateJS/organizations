@@ -50,7 +50,7 @@
     "@cocreate/config": "^1.17.0",
     "@cocreate/crud-client": "^1.36.0",
     "@cocreate/elements": "^1.44.0",
-    "@cocreate/server": "^1.8.0"
+    "@cocreate/server": "^1.9.0"
   },
   "devDependencies": {
     "@cocreate/webpack": "^1.7.0"
