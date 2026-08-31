@@ -176,7 +176,7 @@ async function createEnvironments(data) {
         Data.method = "object.read";
         Data.host = hostname;
         Data.organization_id = organization;
-        Data.$filter = { limit: 0 };
+        Data.filter = { limit: 0 };
 
         if (server && server.crud) {
             let organizations = await server.crud.send({
