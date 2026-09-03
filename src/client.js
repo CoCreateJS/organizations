@@ -267,7 +267,7 @@ async function create(action) {
 	let response = await Crud.socket.send({
 		method: "createOrganization",
 		...objects,
-		broadcastBrowser: false
+		broadcastClient: false
 	});
 
 	action.element.dispatchEvent(
@@ -296,7 +296,7 @@ async function createEnvironment(action) {
 		method: "createEnvironments",
 		organization,
 		hostname,
-		broadcastBrowser: false
+		broadcastClient: false
 	});
 
 	action.element.dispatchEvent(
