@@ -22,126 +22,133 @@
 // For details, visit <https://cocreate.app/licenses/> or contact us at sales@cocreate.app.
 
 import server from '@cocreate/server';
-
-const platformSocket = {
-    config: {
-        organization_id: process.env.organization_id
-    }
-};
+import { ObjectId, uuid } from '@cocreate/utils';
 
 /**
  * Standard error state structure normalization helper.
  */
 function errorHandler(data, error) {
     data.success = false;
-    if (server && server.crud) {
-        server.crud.errorHandler(data, error);
-    }
+    data.message = typeof error === "string"
+        ? error
+        : error?.message || "Organization request failed";
+    data.error = data.message;
 }
 
-/**
- * Validates, formats, and executes concurrent database creations for a new tenant organization,
- * user account, and baseline authorization key sets.
- */
+/** Create an organization and its authenticated user and keys. */
 async function createOrganization(data) {
+    const socket = data.socket;
+    const response = {
+        method: "createOrganization",
+        uuid: data.uuid,
+        socket,
+        host: socket?.host,
+        organization_id: socket?.organization_id,
+        broadcastClient: false,
+        success: false
+    };
     try {
-        const { organization, user, key } = data;
-
-        if (
-            !organization ||
-            !organization._id ||
-            !organization.host ||
-            !organization.host[0] ||
-            !organization.host[0].name
-        ) {
-            errorHandler(
-                data,
-                "invalid_organization: missing required organization fields"
-            );
+        if (!socket?.user_id || !socket.organization_id ||
+            (socket.expires && Date.now() >= Number(socket.expires))) {
+            throw new Error("Sign in before creating an organization");
+        }
+        const details = data.organization;
+        const name = (typeof details?.name === "string" ? details.name.trim() : "") || "Untitled";
+        const hostName = details?.host?.[0]?.name ?? details?.["host[0].name"] ?? details?.["host.0.name"];
+        const hostname = typeof hostName === "string" ? hostName.trim().toLowerCase() : "";
+        if (hostname.length > 253 || !hostname.includes(".") ||
+            !hostname.split(".").every(label => /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label))) {
+            throw new Error("A valid host is required");
         }
 
-        if (!user || !user._id || !user.email || !user.password) {
-            errorHandler(
-                data,
-                "invalid_user: missing required user fields"
-            );
+        // Source scope and identity come from the authenticated socket, never the payload.
+        const source = { organization_id: socket.organization_id, host: socket.host };
+        const credentials = await checkedSend({
+            ...source, method: "object.read", array: "keys", object: [],
+            filter: { limit: 2, query: { type: "user", key: socket.user_id } }
+        });
+        if (credentials.object?.length !== 1) {
+            throw new Error("Unable to resolve the signed-in user's credential");
+        }
+        const credential = credentials.object[0];
+        if (typeof credential.array !== "string" || !credential.array ||
+            String(credential.key) !== String(socket.user_id)) {
+            throw new Error("The user credential is missing its profile reference");
+        }
+        const profiles = await checkedSend({
+            ...source, method: "object.read", array: credential.array,
+            object: [{ _id: credential.key }], filter: { limit: 1 }
+        });
+        const profile = profiles.object?.[0];
+        if (!profile || String(profile._id) !== String(socket.user_id)) {
+            throw new Error("Unable to find the signed-in user's profile");
         }
 
-        if (!key || !Array.isArray(key) || key.length < 4) {
-            errorHandler(
-                data,
-                "invalid_key: An array of 4 keys is required with type key, user and role."
-            );
-        }
+        const existing = await checkedSend({
+            method: "object.read", database: server.organization_id,
+            organization_id: server.organization_id, array: "organizations", object: [],
+            filter: { limit: 1, query: { "host.name": hostname } }
+        });
+        if (existing.object?.length) throw new Error("That host is already in use");
 
-        // If there are validation errors, include them in the response and send immediately
-        if (data.success === false) {
-            if (server && server.wsManager) {
-                return server.wsManager.send(data);
-            }
-            return;
-        }
+        const organizationId = ObjectId().toString();
+        const organization = {
+            ...details, name, _id: organizationId, organization_id: organizationId
+        };
+        delete organization.bootstrapStorage;
+        for (const key of Object.keys(organization)) if (key.startsWith("$")) delete organization[key];
+        const user = { ...profile, organization_id: organizationId };
+        delete user.password;
+        for (const key of Object.keys(user)) if (key.startsWith("$")) delete user[key];
 
-        const Data = {};
-        Data.method = "object.update";
-        Data.host = organization.host[0].name;
-        Data.database = [organization._id];
-        Data.organization_id = organization._id;
-        Data.upsert = true;
-
-        if (organization && server && server.crud) {
-            organization.organization_id = organization._id;
-            const response = await server.crud.send({
-                ...Data,
-                array: "organizations",
-                object: organization
-            });
-            if (response.error) {
-                errorHandler(data, response.error);
-            }
+        const roleId = ObjectId().toString();
+        const userKey = {
+            _id: ObjectId().toString(), type: "user", key: user._id,
+            array: credential.array, roles: [roleId]
+        };
+        for (const field of ["email", "username", "password"]) {
+            if (credential[field] !== undefined) userKey[field] = credential[field];
         }
-
-        if (user && server && server.crud) {
-            user.organization_id = organization._id;
-            const response = await server.crud.send({
-                ...Data,
-                array: "users",
-                object: user
-            });
-            if (response.error) {
-                errorHandler(data, response.error);
-            }
+        const keys = [
+            {
+                _id: ObjectId().toString(), type: "key", key: uuid(), default: true,
+                actions: {
+                    signIn: true, signUp: true, checkSession: true,
+                    forgotPassword: true, resetPassword: true, acceptInvite: true,
+                    updateUserStatus: true, isUnique: true
+                }
+            },
+            { _id: roleId, type: "role", name: "admin", admin: true },
+            userKey
+        ].map(key => ({ ...key, organization_id: organizationId }));
+        const destination = {
+            method: "object.create", database: organizationId, organization_id: server.organization_id
+        };
+        // Register the organization, then create its database using platform storage.
+        await checkedSend({
+            method: "object.create", database: server.organization_id,
+            organization_id: server.organization_id, array: "organizations", object: organization
+        });
+        for (const [array, object] of [["organizations", organization], [credential.array, user], ["keys", keys]]) {
+            await checkedSend({ ...destination, array, object });
         }
-
-        if (key && server && server.crud) {
-            key.forEach(k => {
-                k.organization_id = organization._id;
-            });
-            const response = await server.crud.send({
-                ...Data,
-                array: "keys",
-                object: key
-            });
-            if (response.error) {
-                errorHandler(data, response.error);
-            }
-        }
-
-        if (data.success !== false) {
-            data.success = true;
-        }
-
-        if (server && server.wsManager) {
-            server.wsManager.send(data);
-        }
+        response.success = true;
+        response.message = "Organization created";
+        response.organization = { _id: organizationId, name, host: organization.host ?? [{ name: hostName }] };
+        response.user_id = user._id;
+        response.user_array = credential.array;
     } catch (error) {
-        if (data.socket) {
-            errorHandler(data, error);
-            if (server && server.wsManager) {
-                server.wsManager.send(data);
-            }
-        }
+        response.message = error.message || "Unable to create the organization";
     }
+    return server.wsManager.send(response);
+}
+
+async function checkedSend(request) {
+    const result = await server.crud.send(request);
+    if (!result || result.error || result.success === false) {
+        throw new Error(`Unable to ${request.method === "object.read" ? "read" : "create"} ${request.array}`);
+    }
+    return result;
 }
 
 /**

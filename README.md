@@ -83,3 +83,37 @@ We appreciate your continued support, thank you!
 # License
 
 [The MIT License (MIT)](https://github.com/CoCreate-app/CoCreate-organizations/blob/master/LICENSE)
+
+
+### Authenticated organization creation
+
+Run `signUp` and `signIn` successfully before `createOrganization`. The client
+sends the `organizations` form record without submitting a user profile,
+password, keys, or switching its current connection. Separate sections of a
+single form may supply signup and organization details.
+
+The server requires an authenticated socket and uses its source organization
+and user ID to resolve a single `keys` credential (`type: "user"`). The
+credential's `array` and `key` identify the profile to copy; the collection name
+is not hardcoded. The profile keeps its ID, with password and CRUD metadata
+excluded. A new tenant credential preserves existing authentication fields
+server-side and receives the new tenant's admin role. Client-supplied user and
+key records are ignored. The local `generateDB` bootstrap remains separate.
+
+The submitted organization fields, including host and storage, are preserved;
+server-generated IDs replace supplied IDs, and internal `$` metadata and
+`bootstrapStorage` are excluded. Regular CRUD calls register the organization
+first, then create its tenant organization record, user, and keys. Storage
+routing uses the platform organization ID for all creation requests. The first
+write targets the platform database; subsequent writes explicitly target the
+new organization ID as their database. Ownership handoff is separate. Creation stops on the first
+failed operation. These writes are not transactional: a failed provision can
+leave a registered organization with incomplete tenant data. The hostname availability lookup is not an atomic
+reservation; concurrent creation of the same hostname needs a database-level
+uniqueness constraint before public onboarding.
+
+Responses remain in the source session scope and return the new organization's
+ID, name, host, and the profile ID/collection. Credentials and storage connection
+settings are not returned. Session transfer and navigation to the new host are
+separate from creation. Both creation actions use `action.end(response)` only
+on success, otherwise `action.abort()`, with shared notification rendering.
