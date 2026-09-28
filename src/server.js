@@ -104,7 +104,7 @@ async function createOrganization(data) {
         const roleId = ObjectId().toString();
         const userKey = {
             _id: ObjectId().toString(), type: "user", key: user._id,
-            array: credential.array, roles: [roleId]
+            name: user.name, array: credential.array, roles: [roleId]
         };
         for (const field of ["email", "username", "password"]) {
             if (credential[field] !== undefined) userKey[field] = credential[field];
@@ -112,6 +112,7 @@ async function createOrganization(data) {
         const keys = [
             {
                 _id: ObjectId().toString(), type: "key", key: uuid(), default: true,
+                name: "Default", hosts: ["*"],
                 actions: {
                     signIn: true, signUp: true, checkSession: true,
                     forgotPassword: true, resetPassword: true, acceptInvite: true,

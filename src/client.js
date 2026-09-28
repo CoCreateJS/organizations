@@ -21,7 +21,9 @@ async function generateDB(organization = {}, user = {}, key = []) {
         let defaultKey = {
             _id: Crud.ObjectId().toString(),
             type: "key",
+            name: "Default",
             key: uuid(),
+            hosts: ["*"],
             actions: {
                 object: {
                     "*": {
@@ -67,6 +69,7 @@ async function generateDB(organization = {}, user = {}, key = []) {
         let userKey = {
             _id: Crud.ObjectId().toString(),
             type: "user",
+            name: user.name,
             key: user._id,
             array: "users", // could be any array
             roles: [role_id],

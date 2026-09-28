@@ -56,6 +56,8 @@ for(const array of ['contacts', 'users', 'members']) {
     assert.equal(generatedKeys.length, 3);
     assert.equal(generatedKeys.some(key => key.type === 'key' && key.admin), false);
     const defaultKey = generatedKeys.find(key => key.type === 'key' && key.default);
+    assert.equal(defaultKey.name, 'Default');
+    assert.deepEqual(JSON.parse(JSON.stringify(defaultKey.hosts)), ['*']);
     assert.deepEqual(JSON.parse(JSON.stringify(defaultKey.actions)), {
         signIn: true, signUp: true, checkSession: true, forgotPassword: true,
         resetPassword: true, acceptInvite: true, updateUserStatus: true, isUnique: true
@@ -65,6 +67,7 @@ for(const array of ['contacts', 'users', 'members']) {
     assert.equal(key.password,'existing-password');
     assert.equal(key.array,array);
     assert.equal(key.key,'real-user');
+    assert.equal(key.name,'Real User');
     assert.equal(writes[1].database,response.organization._id);
     for (const write of writes) assert.equal(write.organization_id, 'platform');
     for (const write of writes.slice(1)) assert.equal(write.database, response.organization._id);
