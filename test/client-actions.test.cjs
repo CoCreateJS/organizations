@@ -9,6 +9,7 @@ const source = fs.readFileSync(path.join(__dirname, '../src/client.js'), 'utf8')
 async function run(name, response, options = {}) {
     const actions = [];
     const notices = [];
+    const attributes = {};
     let ended = 0, aborted = 0, sent = 0;
     vm.runInNewContext(source, {
         Action: { init: action => actions.push(action) },
@@ -37,13 +38,14 @@ async function run(name, response, options = {}) {
     assert.equal(registered.endEvent, name === 'createOrganization' ? 'createdOrganization' : 'createdEnvironments');
     await registered.callback({
         name,
+        element: { setAttribute: (key, value) => { attributes[key] = value; } },
         form: options.noForm ? null : { querySelector: () => ({ value: 'example.com' }) },
         abort: () => aborted++,
         end: detail => { ended++; assert.equal(detail, response); assert.equal(notices.length, 1); }
     });
     assert.equal(notices.length, 1);
     assert.equal(notices[0].selector, '[template~="notification"]');
-    return { ended, aborted, sent, notice: notices[0].data[0] };
+    return { ended, aborted, sent, notice: notices[0].data[0] || notices[0].data, attributes };
 }
 for (const name of ['createOrganization', 'createEnvironments']) {
     test(`${name} ends on success with the response`, async () => {
@@ -68,4 +70,12 @@ for (const name of ['createOrganization', 'createEnvironments']) {
 test('missing organization details do not send a creation request', async () => {
     const result = await run('createOrganization', {}, { noOrganization: true });
     assert.equal(result.aborted, 1); assert.equal(result.sent, 0);
+});
+test('createOrganization assigns the published subdomain href before ending', async () => {
+    const result = await run('createOrganization', {
+        success: true,
+        message: 'Published',
+        redirect: 'https://team.example.com/admin/'
+    });
+    assert.equal(result.attributes.href, 'https://team.example.com/admin/');
 });

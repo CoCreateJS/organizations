@@ -113,7 +113,36 @@ reservation; concurrent creation of the same hostname needs a database-level
 uniqueness constraint before public onboarding.
 
 Responses remain in the source session scope and return the new organization's
-ID, name, host, and the profile ID/collection. Credentials and storage connection
-settings are not returned. Session transfer and navigation to the new host are
-separate from creation. Both creation actions use `action.end(response)` only
-on success, otherwise `action.abort()`, with shared notification rendering.
+ID, name, host, and the profile ID/collection. Credentials and storage
+connection settings are not returned. After publishing succeeds, the creation
+action sets the returned organization URL on its button. Both creation actions
+use `action.end(response)` only on success, otherwise `action.abort()`, with
+shared notification rendering.
+
+### Server API and managed repositories
+
+Initialize the Node module explicitly after the shared server is ready:
+
+```js
+const Organizations = await import("@cocreate/organizations");
+await Organizations.init(server);
+```
+
+Initialization attaches `server.organizations`. Its `provision(data)` method
+clones the public site template into the isolated local workspace, attempts the
+managed repository backup, and then runs `coc upload`. Organization signup
+awaits that full sequence after all required database writes succeed. The
+successful response provides the organization URL, which the browser assigns
+to the action button's `href`; the action runner follows it only after the
+button's remaining actions finish. Missing GitHub credentials or a remote
+outage set `git.backup.status` to `failed` without blocking the upload, while an
+upload failure marks provisioning failed and prevents the redirect. Other
+services, including Server AI, call the same provisioning method when an
+organization checkout is needed; they do not implement GitHub or cloning logic
+themselves.
+
+Provisioning configuration is loaded from the `organizations` configuration
+namespace and `servers_config` records with `type: "organizations"`. GitHub
+credentials come from the provider-native `token` field in the configured
+platform API record and are passed to Git
+through process-local headers, never repository URLs or saved Git config.

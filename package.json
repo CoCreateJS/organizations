@@ -50,7 +50,6 @@
     "@cocreate/config": "^1.21.0",
     "@cocreate/crud-client": "^1.37.0",
     "@cocreate/elements": "^1.46.0",
-    "@cocreate/server": "^1.11.0",
     "@cocreate/utils": "^1.42.2",
     "@cocreate/render": "^1.51.0"
   },

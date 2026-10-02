@@ -242,6 +242,10 @@ async function create(action) {
             broadcastClient: false
         });
 
+        if (response?.success === true && response.redirect && action.element) {
+            action.element.setAttribute("href", response.redirect);
+        }
+
         finishAction(action, response);
     } catch (error) {
         finishAction(action, { success: false, message: error.message });

@@ -21,8 +21,11 @@
 // you must obtain a commercial license from CoCreate LLC.
 // For details, visit <https://cocreate.app/licenses/> or contact us at sales@cocreate.app.
 
-import server from '@cocreate/server';
 import { ObjectId, uuid } from '@cocreate/utils';
+import { resolveOrganizationsConfig } from './config.js';
+import { createOrganizationProvisioner } from './provision.js';
+
+let server;
 
 /**
  * Standard error state structure normalization helper.
@@ -33,6 +36,51 @@ function errorHandler(data, error) {
         ? error
         : error?.message || "Organization request failed";
     data.error = data.message;
+}
+
+/** Provision the repository and publish the site before signup may redirect. */
+async function provisionOrganization(organization, upload) {
+    if (!organization?._id) throw new Error("An organization is required for provisioning");
+    if (server?.organizations?.config?.enabled !== true) {
+        throw new Error("Organization provisioning is disabled");
+    }
+    if (typeof server?.organizations?.provision !== "function") {
+        throw new Error("Organization provisioning is unavailable");
+    }
+
+    return server.organizations.provision({
+        organization_id: organization._id,
+        organization: {
+            _id: organization._id,
+            name: organization.name,
+            host: organization.host,
+            provisioning: organization.provisioning
+        },
+        upload
+    });
+}
+
+function websocketHost(hostname) {
+    const host = String(server?.host || hostname).trim();
+    if (/^wss?:\/\//i.test(host)) return host;
+    if (/^https?:\/\//i.test(host)) return host.replace(/^http/i, "ws");
+    return `wss://${host}`;
+}
+
+function createOrganizationHosts(details, hostname) {
+    const submitted = Array.isArray(details?.host) && details.host[0]
+        ? { ...details.host[0] }
+        : {};
+    for (const field of ["database", "storage"]) {
+        const value = details?.[`host[0].${field}`] ?? details?.[`host.0.${field}`];
+        if (value !== undefined) submitted[field] = value;
+    }
+    submitted.name = hostname;
+    return [
+        submitted,
+        { database: "dev", name: `dev.${hostname}`, storage: "" },
+        { database: "test", name: `test.${hostname}`, storage: "" }
+    ];
 }
 
 /** Create an organization and its authenticated user and keys. */
@@ -60,6 +108,7 @@ async function createOrganization(data) {
             !hostname.split(".").every(label => /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label))) {
             throw new Error("A valid host is required");
         }
+        const hosts = createOrganizationHosts(details, hostname);
 
         // Source scope and identity come from the authenticated socket, never the payload.
         const source = { organization_id: socket.organization_id, host: socket.host };
@@ -87,15 +136,30 @@ async function createOrganization(data) {
         const existing = await checkedSend({
             method: "object.read", database: server.organization_id,
             organization_id: server.organization_id, array: "organizations", object: [],
-            filter: { limit: 1, query: { "host.name": hostname } }
+            filter: {
+                limit: 1,
+                query: { "host.name": { $in: hosts.map(host => host.name) } }
+            }
         });
         if (existing.object?.length) throw new Error("That host is already in use");
 
         const organizationId = ObjectId().toString();
+        const provisioning = {
+            status: "pending",
+            requested_at: new Date().toISOString()
+        };
         const organization = {
-            ...details, name, _id: organizationId, organization_id: organizationId
+            ...details,
+            name,
+            _id: organizationId,
+            organization_id: organizationId,
+            host: hosts,
+            provisioning
         };
         delete organization.bootstrapStorage;
+        for (const key of Object.keys(organization)) {
+            if (/^host(?:\[0\]|\.0)\./.test(key)) delete organization[key];
+        }
         for (const key of Object.keys(organization)) if (key.startsWith("$")) delete organization[key];
         const user = { ...profile, organization_id: organizationId };
         delete user.password;
@@ -109,6 +173,7 @@ async function createOrganization(data) {
         for (const field of ["email", "username", "password"]) {
             if (credential[field] !== undefined) userKey[field] = credential[field];
         }
+        const uploadApiKey = uuid();
         const keys = [
             {
                 _id: ObjectId().toString(), type: "key", key: uuid(), default: true,
@@ -118,6 +183,10 @@ async function createOrganization(data) {
                     forgotPassword: true, resetPassword: true, acceptInvite: true,
                     updateUserStatus: true, isUnique: true
                 }
+            },
+            {
+                _id: ObjectId().toString(), type: "key", key: uploadApiKey,
+                name: "Deployment", admin: true
             },
             { _id: roleId, type: "role", name: "admin", admin: true },
             userKey
@@ -133,11 +202,22 @@ async function createOrganization(data) {
         for (const [array, object] of [["organizations", organization], [credential.array, user], ["keys", keys]]) {
             await checkedSend({ ...destination, array, object });
         }
+        const provisioningResult = await provisionOrganization(organization, {
+            apikey: uploadApiKey,
+            host: websocketHost(hostname)
+        });
         response.success = true;
-        response.message = "Organization created";
-        response.organization = { _id: organizationId, name, host: organization.host ?? [{ name: hostName }] };
+        response.message = "Organization created and published";
+        response.organization = {
+            _id: organizationId,
+            name,
+            host: organization.host ?? [{ name: hostName }],
+            provisioning: provisioningResult?.provisioning || provisioning
+        };
         response.user_id = user._id;
         response.user_array = credential.array;
+        response.provisioning = provisioningResult?.provisioning || provisioning;
+        response.redirect = `https://${hostname}/admin/`;
     } catch (error) {
         response.message = error.message || "Unable to create the organization";
     }
@@ -249,23 +329,29 @@ async function createEnvironments(data) {
     }
 }
 
-/**
- * Auto-initialization loop.
- * Silently polls to verify that the unified server orchestrator is fully loaded,
- * and that both the database (crud) and socket manager (wsManager) have completed
- * their initial handshakes, then attaches active organization creation listeners.
- */
-function init() {
-    if (server && server.isInitialized && server.crud && server.wsManager) {
-        server.wsManager.on("createOrganization", (data) => createOrganization(data));
-        server.wsManager.on("createEnvironments", (data) => createEnvironments(data));
-    } else {
-        // If the shared WebSocket manager has not yet populated, check again in 500ms
-        setTimeout(init, 500);
+const Organizations = {
+    create: createOrganization,
+    createEnvironments,
+    provision: null,
+    config: null
+};
+
+/** Attach organization services and socket handlers to an initialized server. */
+export async function init(Server, options = {}) {
+    if (!Server?.crud || !Server?.wsManager) {
+        throw new Error("An initialized CoCreate server is required");
     }
+    server = Server;
+    const organizationsConfig = await resolveOrganizationsConfig(server, options);
+    const provisioner = createOrganizationProvisioner({
+        server,
+        localFsRoot: organizationsConfig.localFsRoot,
+        config: organizationsConfig
+    });
+    Organizations.config = organizationsConfig;
+    Organizations.provision = provisioner.provisionOrganization;
+    server.organizations = Organizations;
+    server.wsManager.on("createOrganization", (data) => server.organizations.create(data));
+    server.wsManager.on("createEnvironments", (data) => server.organizations.createEnvironments(data));
+    return Organizations;
 }
-
-// Auto-execute initialization instantly upon module load
-init();
-
-export default init;
