@@ -1,6 +1,5 @@
 import Crud from "@cocreate/crud-client";
 import Action from "@cocreate/actions";
-import Elements from "@cocreate/elements";
 import { render } from "@cocreate/render";
 import Config from "@cocreate/config";
 import Indexeddb from "@cocreate/indexeddb";
@@ -230,6 +229,7 @@ async function create(action) {
         let form = action.form;
         if (!form) throw new Error("A form is required");
 
+        const Elements = (await import("@cocreate/elements")).default;
         let data = await Elements.getData(form);
 
         const entry = data.find(item => item.array === "organizations");
