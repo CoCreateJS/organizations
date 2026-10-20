@@ -31,7 +31,7 @@
   },
   "homepage": "https://cocreate.app/docs/organizations",
   "funding": {
-    "type": "GitHub Sponsors \u2764",
+    "type": "GitHub Sponsors ❤",
     "url": "https://github.com/sponsors/CoCreate-app"
   },
   "type": "module",
@@ -50,7 +50,7 @@
     "@cocreate/config": "^1.21.0",
     "@cocreate/crud-client": "^1.37.0",
     "@cocreate/elements": "^1.46.0",
-    "@cocreate/utils": "^1.42.2",
+    "@cocreate/utils": "^1.54.0",
     "@cocreate/render": "^1.51.0"
   },
   "devDependencies": {
