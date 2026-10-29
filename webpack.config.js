@@ -7,7 +7,7 @@ module.exports = async (env, argv) => {
 	const isProduction = argv && argv.mode === "production";
 	const config = {
 		entry: {
-			"CoCreate-organizations": "./src/index.js"
+			"CoCreate-organizations": "./src/client/index.js"
 		},
 		output: {
 			path: path.resolve(__dirname, "dist"),

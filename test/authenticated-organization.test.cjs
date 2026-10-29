@@ -3,7 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const test = require('node:test');
-const code = fs.readFileSync(path.join(__dirname, '../src/server.js'), 'utf8')
+const code = fs.readFileSync(path.join(__dirname, '../src/server/index.js'), 'utf8')
     .replace(/^import .*;\r?\n/gm, '').replace('export async function init', 'async function init');
 async function run(options = {}) {
     let handler, response, nextId = 0;

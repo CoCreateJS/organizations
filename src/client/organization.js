@@ -1,11 +1,12 @@
 import Crud from "@cocreate/crud-client";
-import Action from "@cocreate/actions";
+import Actions from "@cocreate/actions";
+import Elements from "@cocreate/elements";
 import { render } from "@cocreate/render";
 import Config from "@cocreate/config";
 import Indexeddb from "@cocreate/indexeddb";
 import { uuid } from "@cocreate/utils";
 
-async function generateDB(organization = {}, user = {}, key = []) {
+export async function generateDB(organization = {}, user = {}, key = []) {
     try {
         // Create organization
         organization._id = organization._id || Crud.ObjectId().toString();
@@ -101,7 +102,7 @@ function saveLocally(objects) {
     }
 }
 
-async function get() {
+export async function get() {
     let organization_id = await getOrganizationFromServiceWorker();
     if (!organization_id) {
         let data = await Indexeddb.send({ method: "database.read" });
@@ -174,6 +175,7 @@ async function getOrganizationFromServiceWorker() {
 }
 
 let organizationPromise = null;
+let initialized = false;
 async function createOrganizationPromise() {
     let createOrganization = document.querySelector(
         '[actions*="createOrganization"]'
@@ -229,7 +231,6 @@ async function create(action) {
         let form = action.form;
         if (!form) throw new Error("A form is required");
 
-        const Elements = (await import("@cocreate/elements")).default;
         let data = await Elements.getData(form);
 
         const entry = data.find(item => item.array === "organizations");
@@ -252,66 +253,43 @@ async function create(action) {
     }
 }
 
-async function createEnvironment(action) {
-    try {
-        let form = action.form;
-        if (!form) throw new Error("A form is required");
-
-        let organization = form.querySelector("#organization");
-        if (organization) {
-            organization = organization.value;
-        }
-
-        let hostname = form.querySelector("#hostname");
-        if (hostname) {
-            hostname = hostname.value;
-            hostname = ["dev." + hostname, "test." + hostname];
-        }
-
-        let response = await Crud.socket.send({
-            method: "createEnvironments",
-            organization,
-            hostname,
-            broadcastClient: false
-        });
-
-        finishAction(action, response);
-    } catch (error) {
-        finishAction(action, { success: false, message: error.message });
-    }
-}
-
 function finishAction(action, response) {
     const success = response?.success === true && !response.error;
     if (!success) action.abort();
 
     const type = action.name || "createOrganization";
-    const errorMessage = typeof response?.error === "string"
-        ? response.error : response?.error?.message;
+    const errorMessage =
+        typeof response?.error === "string"
+            ? response.error
+            : response?.error?.message;
     render({
         selector: '[template~="notification"]',
         data: {
             type,
             status: success ? "success" : "error",
             success,
-            message: response?.message || errorMessage || (success
-                ? type === "createEnvironments" ? "Environments created" : "Organization created"
-                : "Unable to complete the request. Please try again.")
+            message:
+                response?.message ||
+                errorMessage ||
+                (success
+                    ? "Organization created"
+                    : "Unable to complete the request. Please try again.")
         }
     });
 
     if (success) action.end(response);
 }
 
-Action.init({
-    name: "createOrganization",
-    endEvent: "createdOrganization",
-    callback: create
-});
-Action.init({
-    name: "createEnvironments",
-    endEvent: "createdEnvironments",
-    callback: createEnvironment
-});
+export function init() {
+    if (initialized) return;
+    initialized = true;
 
+    Actions.init({
+        name: "createOrganization",
+        endEvent: "createdOrganization",
+        callback: create
+    });
+}
+
+export { create };
 export default { generateDB, create, get };
