@@ -29,6 +29,8 @@ let server;
 
 /**
  * Standard error state structure normalization helper.
+ * @private
+ * @environment server
  */
 function errorHandler(data, error) {
     data.success = false;
@@ -38,7 +40,9 @@ function errorHandler(data, error) {
     data.error = data.message;
 }
 
-/** Provision the repository and publish the site before signup may redirect. */
+/** Provision the repository and publish the site before signup may redirect.  * @private
+ * @environment server
+ */
 async function provisionOrganization(organization, upload) {
     if (!organization?._id) throw new Error("An organization is required for provisioning");
     if (server?.organizations?.config?.enabled !== true) {
@@ -83,7 +87,9 @@ function createOrganizationHosts(details, hostname) {
     ];
 }
 
-/** Create an organization and its authenticated user and keys. */
+/** Create an organization and its authenticated user and keys.  * @private
+ * @environment server
+ */
 async function createOrganization(data) {
     const socket = data.socket;
     const response = {
@@ -234,6 +240,8 @@ async function checkedSend(request) {
 
 /**
  * Orchestrates multi-tenant database clone mappings and environment setup across specific domain hosts.
+ * @private
+ * @environment server
  */
 async function createEnvironments(data) {
     try {
@@ -336,7 +344,9 @@ const Organizations = {
     config: null
 };
 
-/** Attach organization services and socket handlers to an initialized server. */
+/** Attach organization services and socket handlers to an initialized server.  * @public
+ * @environment server
+ */
 export async function init(Server, options = {}) {
     if (!Server?.crud || !Server?.wsManager) {
         throw new Error("An initialized CoCreate server is required");
@@ -355,3 +365,10 @@ export async function init(Server, options = {}) {
     server.wsManager.on("createEnvironments", (data) => server.organizations.createEnvironments(data));
     return Organizations;
 }
+
+/**
+ * A simple organizations component in vanilla javascript. Easily configured using HTML5 attributes and/or JavaScript API.
+ *
+ * @module organizations
+ * @environment server
+ */

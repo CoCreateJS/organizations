@@ -15,49 +15,6 @@
   "publishConfig": {
     "access": "public"
   },
-  "cocreate": {
-    "environment": [
-      "client",
-      "server"
-    ],
-    "interface": {
-      "schemaVersion": 1,
-      "summary": "A simple organizations component in vanilla javascript. Easily configured using HTML5 attributes and/or JavaScript API.",
-      "client": {
-        "source": "src/client/index.js",
-        "declarative": {
-          "attributes": [
-            {
-              "name": "actions"
-            }
-          ],
-          "actions": [
-            {
-              "name": "createOrganization"
-            }
-          ],
-          "selectors": [
-            "[actions]"
-          ]
-        },
-        "api": {
-          "exports": [
-            "create",
-            "generateDB",
-            "get"
-          ]
-        }
-      },
-      "server": {
-        "source": "src/server/index.js",
-        "api": {
-          "exports": [
-            "init"
-          ]
-        }
-      }
-    }
-  },
   "scripts": {
     "start": "webpack --config webpack.config.js",
     "build": "webpack --mode=production --config webpack.config.js",

@@ -96,14 +96,29 @@ Observer.init([
 document.querySelectorAll(actionSelector).forEach(loadElement);
 
 const CoCreateOrganizations = {
+    /**
+     *
+ * @public
+ * @environment client
+ */
     generateDB: (...args) =>
         import(/* webpackChunkName: "organizations-create" */ "./organization.js").then(
             (module) => module.generateDB(...args)
         ),
+    /**
+     *
+ * @public
+ * @environment client
+ */
     create: (...args) =>
         import(/* webpackChunkName: "organizations-create" */ "./organization.js").then(
             (module) => module.create(...args)
         ),
+    /**
+     *
+ * @public
+ * @environment client
+ */
     get: (...args) =>
         import(/* webpackChunkName: "organizations-create" */ "./organization.js").then(
             (module) => module.get(...args)
@@ -111,3 +126,50 @@ const CoCreateOrganizations = {
 };
 
 export default CoCreateOrganizations;
+
+/**
+ *
+ * @name actions
+ * @kind member
+ * @attribute
+ * @environment client
+ */
+
+/**
+ * A simple organizations component in vanilla javascript. Easily configured using HTML5 attributes and/or JavaScript API.
+ *
+ * @module organizations
+ * @environment client
+ */
+
+/**
+ * Declarative selectors recognized by this module.
+ *
+ * @name declarative-selectors
+ * @kind member
+ * @selectors
+ * @environment client
+ * @example
+ * ```json
+ * [
+ *   "[actions]"
+ * ]
+ * ```
+ */
+
+/**
+ * Declarative actions supported or registered by this module.
+ *
+ * @name declarative-actions
+ * @kind member
+ * @actions
+ * @environment client
+ * @example
+ * ```json
+ * [
+ *   {
+ *     "name": "createOrganization"
+ *   }
+ * ]
+ * ```
+ */
