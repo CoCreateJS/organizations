@@ -5,8 +5,8 @@ A simple organizations component in vanilla javascript. Easily configured using 
 ![minified](https://img.badgesize.io/https://cdn.CoCreateJS.com/organizations/latest/CoCreate-organizations.min.js?style=flat-square&label=minified&color=orange)
 ![gzip](https://img.badgesize.io/https://cdn.CoCreateJS.com/organizations/latest/CoCreate-organizations.min.js?compression=gzip&style=flat-square&label=gzip&color=yellow)
 ![brotli](https://img.badgesize.io/https://cdn.CoCreateJS.com/organizations/latest/CoCreate-organizations.min.js?compression=brotli&style=flat-square&label=brotli)
-![GitHub latest release](https://img.shields.io/github/v/release/CoCreate-app/CoCreate-organizations?style=flat-square)
-![License](https://img.shields.io/github/license/CoCreate-app/CoCreate-organizations?style=flat-square)
+![GitHub latest release](https://img.shields.io/github/v/release/CoCreateJS/organizations?style=flat-square)
+![License](https://img.shields.io/github/license/CoCreateJS/organizations?style=flat-square)
 ![Hiring](https://img.shields.io/static/v1?style=flat-square&label=&message=Hiring&color=blueviolet)
 
 ![CoCreate-organizations](https://cdn.CoCreateJS.com/docs/CoCreate-organizations.gif)
@@ -50,13 +50,13 @@ $ yarn install @cocreate/organizations
 
 # Announcements
 
-All updates to this library are documented in our [CHANGELOG](https://github.com/CoCreateJS/CoCreate-organizations/blob/master/CHANGELOG.md) and [releases](https://github.com/CoCreateJS/CoCreate-organizations/releases). You may also subscribe to email for releases and breaking changes.
+All updates to this library are documented in our [CHANGELOG](https://github.com/CoCreateJS/organizations/blob/master/CHANGELOG.md) and [releases](https://github.com/CoCreateJS/organizations/releases). You may also subscribe to email for releases and breaking changes.
 
 <a name="roadmap"></a>
 
 # Roadmap
 
-If you are interested in the future direction of this project, please take a look at our open [issues](https://github.com/CoCreateJS/CoCreate-organizations/issues) and [pull requests](https://github.com/CoCreateJS/CoCreate-organizations/pulls). We would love to hear your feedback.
+If you are interested in the future direction of this project, please take a look at our open [issues](https://github.com/CoCreateJS/organizations/issues) and [pull requests](https://github.com/CoCreateJS/organizations/pulls). We would love to hear your feedback.
 
 <a name="about"></a>
 
@@ -72,9 +72,9 @@ CoCreate-organizations is maintained and funded by CoCreate. The names and logos
 
 # How to Contribute
 
-We encourage contribution to our libraries (you might even score some nifty swag), please see our [CONTRIBUTING](https://github.com/CoCreateJS/CoCreate-organizations/blob/master/CONTRIBUTING.md) guide for details.
+We encourage contribution to our libraries (you might even score some nifty swag), please see our [CONTRIBUTING](https://github.com/CoCreateJS/organizations/blob/master/CONTRIBUTING.md) guide for details.
 
-We want this library to be community-driven, and CoCreate led. We need your help to realize this goal. To help make sure we are building the right things in the right order, we ask that you create [issues](https://github.com/CoCreateJS/CoCreate-organizations/issues) and [pull requests](https://github.com/CoCreateJS/CoCreate-organizations/pulls) or merely upvote or comment on existing issues or pull requests.
+We want this library to be community-driven, and CoCreate led. We need your help to realize this goal. To help make sure we are building the right things in the right order, we ask that you create [issues](https://github.com/CoCreateJS/organizations/issues) and [pull requests](https://github.com/CoCreateJS/organizations/pulls) or merely upvote or comment on existing issues or pull requests.
 
 We appreciate your continued support, thank you!
 
@@ -82,7 +82,7 @@ We appreciate your continued support, thank you!
 <a name="license"></a>
 # License
 
-[The MIT License (MIT)](https://github.com/CoCreateJS/CoCreate-organizations/blob/master/LICENSE)
+[The MIT License (MIT)](https://github.com/CoCreateJS/organizations/blob/master/LICENSE)
 
 
 ### Authenticated organization creation

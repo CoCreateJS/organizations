@@ -22,17 +22,17 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/cocreatejs/CoCreate-organizations.git"
+    "url": "git+https://github.com/CoCreateJS/organizations.git"
   },
   "author": "CoCreate LLC",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/CoCreateJS/CoCreate-organizations/issues"
+    "url": "https://github.com/CoCreateJS/organizations/issues"
   },
   "homepage": "https://CoCreateJS.com/docs/organizations",
   "funding": {
     "type": "GitHub Sponsors ❤",
-    "url": "https://github.com/sponsors/CoCreate-app"
+    "url": "https://github.com/sponsors/CoCreateJS"
   },
   "type": "module",
   "main": "./src/server/index.js",
