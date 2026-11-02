@@ -1,3 +1,29 @@
+# [1.32.0](https://github.com/CoCreateJS/organizations/compare/v1.31.2...v1.32.0) (2026-11-02)
+
+
+### Bug Fixes
+
+* add @cocreate/server dependency to package.json ([986a843](https://github.com/CoCreateJS/organizations/commit/986a843fc684453f9d650b71af3c52041018845e))
+* add Deno specific entries to .gitignore ([cb1c137](https://github.com/CoCreateJS/organizations/commit/cb1c137840475d08ab6ca7440cf28a21ad5a115c))
+* bump [@cocreate](https://github.com/cocreate) dependencies ([c2eb8c7](https://github.com/CoCreateJS/organizations/commit/c2eb8c7f38cf332cb9e164a9969017a05bd2760b))
+* bump [@cocreate](https://github.com/cocreate) package versions ([72464ab](https://github.com/CoCreateJS/organizations/commit/72464abc2dbb67544bdb438a94f41d70848a4cf4))
+* bump versions ([258b81e](https://github.com/CoCreateJS/organizations/commit/258b81e617e3061db8aed440a26fbc09a7698b88))
+* bump versions ([136aa37](https://github.com/CoCreateJS/organizations/commit/136aa37d7243c0efaf38331a18ec675b38803fa6))
+* bumped dependencies ([1a9a42b](https://github.com/CoCreateJS/organizations/commit/1a9a42bcb2c796736f939b8be3fe4437ece94605))
+* defer elements import in organization client ([4dba9eb](https://github.com/CoCreateJS/organizations/commit/4dba9eb94b2704b14e5302cc423a91b118dace55))
+* remove trailing slash from node_modules entry in .gitignore ([c8606be](https://github.com/CoCreateJS/organizations/commit/c8606bee6af92b1b5c79be456b97c4153501c95d))
+* replace legacy $filter field with filter ([f97f113](https://github.com/CoCreateJS/organizations/commit/f97f113c40cdd42824801b67b76d4e1011697d55))
+* update git url ([60b74c4](https://github.com/CoCreateJS/organizations/commit/60b74c42d3797391d922669f917ef9115c63dfac))
+* update GitHub Actions to use latest versions and sync package.json description ([40e064f](https://github.com/CoCreateJS/organizations/commit/40e064fe8acd28bac3efb8d88c8dce2f55c20ff7))
+
+
+### Features
+
+* bump all dependencies ([3c71764](https://github.com/CoCreateJS/organizations/commit/3c71764413d19249a11cc3d9c4d44a80f60f11aa))
+* bumped all dependency versions ([14795a5](https://github.com/CoCreateJS/organizations/commit/14795a5e670113e56140aba41704f0255cdf967a))
+* provision organization workspaces ([b8a6917](https://github.com/CoCreateJS/organizations/commit/b8a69174555db02b31681831bf188a2100963ed0))
+* replace uuid import and usage with utils; update API key handling in forms ([c6a3e8a](https://github.com/CoCreateJS/organizations/commit/c6a3e8a9eda5a9ef6ca0ed06e9992d101bba9c94))
+
 ## [1.31.2](https://github.com/CoCreateJS/CoCreate-organizations/compare/v1.31.1...v1.31.2) (2026-07-19)
 
 
