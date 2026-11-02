@@ -130,8 +130,7 @@ export default CoCreateOrganizations;
 /**
  *
  * @name actions
- * @kind member
- * @attribute
+ * @kind attribute
  * @environment client
  */
 
