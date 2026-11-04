@@ -23,7 +23,9 @@
 
 import { ObjectId, uuid } from '@cocreate/utils';
 import { resolveOrganizationsConfig } from './config.js';
-import { createOrganizationProvisioner } from './provision.js';
+import { requireBootstrapStorage } from './bootstrap.js';
+import { createRepositoryCredential, githubKnownHosts } from './repository-credential.js';
+import { isDeepStrictEqual } from 'node:util';
 
 let server;
 
@@ -38,37 +40,6 @@ function errorHandler(data, error) {
         ? error
         : error?.message || "Organization request failed";
     data.error = data.message;
-}
-
-/** Provision the repository and publish the site before signup may redirect.  * @private
- * @environment server
- */
-async function provisionOrganization(organization, upload) {
-    if (!organization?._id) throw new Error("An organization is required for provisioning");
-    if (server?.organizations?.config?.enabled !== true) {
-        throw new Error("Organization provisioning is disabled");
-    }
-    if (typeof server?.organizations?.provision !== "function") {
-        throw new Error("Organization provisioning is unavailable");
-    }
-
-    return server.organizations.provision({
-        organization_id: organization._id,
-        organization: {
-            _id: organization._id,
-            name: organization.name,
-            host: organization.host,
-            provisioning: organization.provisioning
-        },
-        upload
-    });
-}
-
-function websocketHost(hostname) {
-    const host = String(server?.host || hostname).trim();
-    if (/^wss?:\/\//i.test(host)) return host;
-    if (/^https?:\/\//i.test(host)) return host.replace(/^http/i, "ws");
-    return `wss://${host}`;
 }
 
 function createOrganizationHosts(details, hostname) {
@@ -87,6 +58,41 @@ function createOrganizationHosts(details, hostname) {
     ];
 }
 
+async function runWorkflow(name, organization_id, host, input) {
+    if (typeof server?.workflow?.run !== 'function') {
+        throw new Error('Organization workflows are unavailable');
+    }
+
+    const result = await server.workflow.run({
+        method: `workflow.${name}`,
+        organization_id,
+        host,
+        [name]: [input]
+    });
+    const errors = Array.isArray(result?.error)
+        ? result.error
+        : result?.error ? [result.error] : [];
+    if (errors.length) {
+        throw new Error(errors.map(error => error?.message || String(error)).join('; '));
+    }
+
+    return result?.[name]?.[0] || {};
+}
+
+async function requireEnabledPlatformWorkflow(name, host) {
+    const response = await checkedSend({
+        method: 'object.read',
+        organization_id: server.organization_id,
+        host,
+        array: 'workflows',
+        filter: { query: { name, enabled: true }, key: { _id: 1, name: 1, description: 1, enabled: 1, actions: 1 }, limit: 1 }
+    });
+    if (!response.object?.length) {
+        throw new Error(`The ${name} workflow is unavailable or disabled`);
+    }
+    return response.object[0];
+}
+
 /** Create an organization and its authenticated user and keys.  * @private
  * @environment server
  */
@@ -101,6 +107,11 @@ async function createOrganization(data) {
         broadcastClient: false,
         success: false
     };
+    let organizationId;
+    let organizationRegistered = false;
+    let databaseAttached = false;
+    let tenantInitialized = false;
+    let repositoryInitialized = false;
     try {
         if (!socket?.user_id || !socket.organization_id ||
             (socket.expires && Date.now() >= Number(socket.expires))) {
@@ -149,9 +160,19 @@ async function createOrganization(data) {
         });
         if (existing.object?.length) throw new Error("That host is already in use");
 
-        const organizationId = ObjectId().toString();
+        const organizationsConfig = server.organizations.config || {};
+        const databaseSettings = organizationsConfig.databaseProvisioning || {};
+        const databaseWorkflow = organizationsConfig.databaseWorkflow || 'create-organization-database';
+        const organizationWorkflow = organizationsConfig.organizationWorkflow || 'create-organization';
+        const repositoryWorkflow = organizationsConfig.repositoryWorkflow || 'create-organization-repository';
+        const repositorySettings = organizationsConfig.repositoryProvisioning || {};
+        await requireEnabledPlatformWorkflow(databaseWorkflow, socket.host);
+        const organizationDefinition = await requireEnabledPlatformWorkflow(organizationWorkflow, socket.host);
+        await requireEnabledPlatformWorkflow(repositoryWorkflow, socket.host);
+
+        organizationId = ObjectId().toString();
         const provisioning = {
-            status: "pending",
+            status: "provisioning",
             requested_at: new Date().toISOString()
         };
         const organization = {
@@ -163,6 +184,8 @@ async function createOrganization(data) {
             provisioning
         };
         delete organization.bootstrapStorage;
+        delete organization.storage;
+        delete organization.git;
         for (const key of Object.keys(organization)) {
             if (/^host(?:\[0\]|\.0)\./.test(key)) delete organization[key];
         }
@@ -197,42 +220,195 @@ async function createOrganization(data) {
             { _id: roleId, type: "role", name: "admin", admin: true },
             userKey
         ].map(key => ({ ...key, organization_id: organizationId }));
-        const destination = {
-            method: "object.create", database: organizationId, organization_id: server.organization_id
-        };
-        // Register the organization, then create its database using platform storage.
+        // Register the platform organization first. Tenant storage is attached
+        // only after the workflow has provisioned and persisted its bootstrap object.
         await checkedSend({
             method: "object.create", database: server.organization_id,
             organization_id: server.organization_id, array: "organizations", object: organization
         });
-        for (const [array, object] of [["organizations", organization], [credential.array, user], ["keys", keys]]) {
-            await checkedSend({ ...destination, array, object });
-        }
-        const provisioningResult = await provisionOrganization(organization, {
-            apikey: uploadApiKey,
-            host: websocketHost(hostname)
+        organizationRegistered = true;
+
+        const database = await runWorkflow(databaseWorkflow, server.organization_id, socket.host, {
+            ...databaseSettings,
+            organizationId
         });
+        const bootstrapStorage = requireBootstrapStorage(database.bootstrapStorage);
+        const storedOrganization = await checkedSend({
+            method: 'object.read', database: server.organization_id,
+            organization_id: server.organization_id, array: 'organizations',
+            object: [{ _id: organizationId }],
+            filter: { key: { _id: 1, bootstrapStorage: 1 }, limit: 1 }
+        });
+        if (!isDeepStrictEqual(storedOrganization.object?.[0]?.bootstrapStorage, bootstrapStorage)) {
+            throw new Error('Database provisioning did not persist the returned bootstrapStorage on the platform organization.');
+        }
+        databaseAttached = true;
+
+        const tenantHosts = hosts.map((host, index) => ({
+            ...host,
+            database: host.database || (index === 0 ? organizationId : host.database),
+            storage: bootstrapStorage.name
+        }));
+        const tenantOrganization = {
+            ...organization,
+            bootstrapStorage,
+            host: tenantHosts,
+            provisioning: {
+                ...provisioning,
+                status: 'initializing-repository',
+                database: { status: 'ready' },
+                tenant: { status: 'ready' },
+                repository: { status: 'pending' }
+            }
+        };
+        await checkedSend({
+            method: 'object.update',
+            organization_id: server.organization_id,
+            host: socket.host,
+            array: 'organizations',
+            object: {
+                _id: organizationId,
+                host: tenantHosts,
+                provisioning: {
+                    ...provisioning,
+                    status: 'initializing-tenant',
+                    database: { status: 'ready' }
+                }
+            }
+        });
+        await checkedSend({
+            method: 'object.update',
+            organization_id: organizationId,
+            host: hostname,
+            array: 'workflows',
+            upsert: true,
+            object: {
+                ...organizationDefinition,
+                organization_id: organizationId
+            }
+        });
+
+        const tenantInitialization = await runWorkflow(organizationWorkflow, organizationId, hostname, {
+            organization: tenantOrganization,
+            user,
+            userArray: credential.array,
+            keys
+        });
+        if (tenantInitialization.initialized !== true) {
+            throw new Error('Tenant organization initialization did not complete');
+        }
+        tenantInitialized = true;
+
+        // Keep a pending credential in the tenant DB before registering its public key.
+        const repositoryCredential = await createRepositoryCredential(ObjectId().toString());
+        await checkedSend({
+            method: 'object.update', upsert: true, organization_id: organizationId, host: hostname,
+            array: 'apis', object: repositoryCredential
+        });
+        const repository = await runWorkflow(repositoryWorkflow, server.organization_id, socket.host, {
+            ...repositorySettings,
+            organizationId,
+            credentialId: repositoryCredential._id,
+            publicKey: repositoryCredential.publicKey
+        });
+        if (repository.initialized !== true || !repository.git?.clone_url) {
+            throw new Error('Organization repository initialization did not complete');
+        }
+        if (repository.git.api !== repositoryCredential._id || !Number.isSafeInteger(repository.git.deploy_key_id) || repository.git.deploy_key_id <= 0) {
+            throw new Error('Repository deploy key initialization did not complete');
+        }
+        const knownHosts = githubKnownHosts(repository.hostKeys);
+        const activatedCredential = await checkedSend({
+            method: 'object.update', organization_id: organizationId, host: hostname, array: 'apis',
+            object: {
+                _id: repositoryCredential._id, enabled: true, status: 'ready',
+                repository_url: repository.git.clone_url, owner: repository.git.owner,
+                repository: repository.git.repository, deploy_key_id: repository.git.deploy_key_id,
+                knownHosts
+            }
+        });
+        if (!activatedCredential.object?.length) throw new Error('Repository credential was not activated');
+        repositoryInitialized = true;
+        await checkedSend({
+            method: 'object.update',
+            organization_id: organizationId,
+            host: hostname,
+            array: 'organizations',
+            object: {
+                _id: organizationId,
+                git: repository.git,
+                provisioning: {
+                    ...provisioning, status: 'ready',
+                    database: { status: 'ready' }, tenant: { status: 'ready' },
+                    repository: { status: 'ready' }
+                }
+            }
+        });
+
+        const completedAt = new Date().toISOString();
+        await checkedSend({
+            method: 'object.update',
+            organization_id: server.organization_id,
+            host: socket.host,
+            array: 'organizations',
+            object: {
+                _id: organizationId,
+                provisioning: {
+                    ...provisioning,
+                    status: 'ready',
+                    database: { status: 'ready' },
+                    tenant: { status: 'ready' },
+                    repository: { status: 'ready' },
+                    completed_at: completedAt
+                }
+            }
+        });
+
         response.success = true;
-        response.message = "Organization created and published";
+        response.message = "Organization, database, and repository created";
         response.organization = {
             _id: organizationId,
             name,
-            host: organization.host ?? [{ name: hostName }],
-            provisioning: provisioningResult?.provisioning || provisioning
+            host: tenantHosts,
+            provisioning: { ...provisioning, status: 'ready', completed_at: completedAt }
         };
         response.user_id = user._id;
         response.user_array = credential.array;
-        response.provisioning = provisioningResult?.provisioning || provisioning;
-        response.redirect = `https://${hostname}/admin/`;
+        response.provisioning = response.organization.provisioning;
     } catch (error) {
+        if (organizationRegistered && organizationId) {
+            try {
+                await checkedSend({
+                    method: 'object.update',
+                    organization_id: server.organization_id,
+                    host: socket.host,
+                    array: 'organizations',
+                    object: {
+                        _id: organizationId,
+                        provisioning: {
+                            status: 'failed',
+                            failed_at: new Date().toISOString(),
+                            error: String(error.message || error).slice(0, 500),
+                            database: { status: databaseAttached ? 'ready' : 'failed' },
+                            tenant: { status: tenantInitialized ? 'ready' : 'failed' },
+                            repository: { status: repositoryInitialized ? 'ready' : 'failed' }
+                        }
+                    }
+                });
+            } catch (statusError) {
+                console.error('Unable to record organization provisioning failure:', statusError.message);
+            }
+        }
         response.message = error.message || "Unable to create the organization";
+        response.error = response.message;
     }
     return server.wsManager.send(response);
 }
 
 async function checkedSend(request) {
     const result = await server.crud.send(request);
-    if (!result || result.error || result.success === false) {
+    const errors = Array.isArray(result?.error) ? result.error.length : result?.error;
+    if (!result || errors || result.success === false) {
         throw new Error(`Unable to ${request.method === "object.read" ? "read" : "create"} ${request.array}`);
     }
     return result;
@@ -340,7 +516,6 @@ async function createEnvironments(data) {
 const Organizations = {
     create: createOrganization,
     createEnvironments,
-    provision: null,
     config: null
 };
 
@@ -353,13 +528,7 @@ export async function init(Server, options = {}) {
     }
     server = Server;
     const organizationsConfig = await resolveOrganizationsConfig(server, options);
-    const provisioner = createOrganizationProvisioner({
-        server,
-        localFsRoot: organizationsConfig.localFsRoot,
-        config: organizationsConfig
-    });
     Organizations.config = organizationsConfig;
-    Organizations.provision = provisioner.provisionOrganization;
     server.organizations = Organizations;
     server.wsManager.on("createOrganization", (data) => server.organizations.create(data));
     server.wsManager.on("createEnvironments", (data) => server.organizations.createEnvironments(data));

@@ -85,64 +85,82 @@ We appreciate your continued support, thank you!
 [The MIT License (MIT)](https://github.com/CoCreateJS/organizations/blob/master/LICENSE)
 
 
-### Authenticated organization creation
+### Authenticated signup
 
-Run `signUp` and `signIn` successfully before `createOrganization`. The client
-sends the `organizations` form record without submitting a user profile,
-password, keys, or switching its current connection. Separate sections of a
-single form may supply signup and organization details.
+The signup form runs `signUp`, `signIn`, then `createOrganization`. The server
+resolves the signed-in profile and credential from the authenticated socket;
+client-supplied user, key, bootstrap, and repository metadata do not determine
+the new tenant's identity or provisioning credentials.
 
-The server requires an authenticated socket and uses its source organization
-and user ID to resolve a single `keys` credential (`type: "user"`). The
-credential's `array` and `key` identify the profile to copy; the collection name
-is not hardcoded. The profile keeps its ID, with password and CRUD metadata
-excluded. A new tenant credential preserves existing authentication fields
-server-side and receives the new tenant's admin role. Client-supplied user and
-key records are ignored. The local `generateDB` bootstrap remains separate.
+`server.organizations.create(data)` coordinates these workflows in order:
 
-The submitted organization fields, including host and storage, are preserved;
-server-generated IDs replace supplied IDs, and internal `$` metadata and
-`bootstrapStorage` are excluded. Regular CRUD calls register the organization
-first, then create its tenant organization record, user, and keys. Storage
-routing uses the platform organization ID for all creation requests. The first
-write targets the platform database; subsequent writes explicitly target the
-new organization ID as their database. Ownership handoff is separate. Creation stops on the first
-failed operation. These writes are not transactional: a failed provision can
-leave a registered organization with incomplete tenant data. The hostname availability lookup is not an atomic
-reservation; concurrent creation of the same hostname needs a database-level
-uniqueness constraint before public onboarding.
+1. Register a platform organization with a server-generated ID.
+2. Run `create-organization-database` in platform context. The workflow creates
+   provider storage, persists its `bootstrapStorage` on that platform record,
+   and returns the same object. The handler verifies that persistence.
+3. Install the platform-defined `create-organization` workflow into the tenant
+   database, then execute it in tenant context to write the organization,
+   authenticated user profile, credential, and generated keys.
+4. Run `create-organization-repository` in platform context. It creates a private
+   repository from the template's `main`, commits the initial upload config, and
+   creates `dev` and `test` from that same commit. Repository references are
+   retained on the platform and tenant organization records.
+5. Mark signup ready and return a safe organization summary. Bootstrap and
+   deployment credentials are never returned to the client.
 
-Responses remain in the source session scope and return the new organization's
-ID, name, host, and the profile ID/collection. Credentials and storage
-connection settings are not returned. After publishing succeeds, the creation
-action sets the returned organization URL on its button. Both creation actions
-use `action.end(response)` only on success, otherwise `action.abort()`, with
-shared notification rendering.
+The workflow source records live in CoCreate App's
+`src/apps/workflows/config/{data,organization,repository}.js`. Stable record IDs
+allow repeatable uploads without duplicate definitions. Workflow names are
+configurable through `organizations.databaseWorkflow`, `organizationWorkflow`,
+and `repositoryWorkflow`. All three enabled platform definitions are checked
+before a new organization record is created.
 
-### Server API and managed repositories
+The bootstrap object requires non-empty `name` and `provider` strings; remaining
+fields pass through unchanged. The current Atlas database recipe additionally
+requires `cloudProvider`, `regionName`, and `cidrBlock` in
+`organizations.databaseProvisioning`, with configured provider credentials and
+endpoints. That workflow remains disabled until its provider setup is complete.
 
-Initialize the Node module explicitly after the shared server is ready:
+The repository recipe uses `organizations.repositoryProvisioning` for `api`,
+`templateOwner`, and `templateRepository`. The configured managed GitHub API
+must have an `owner`, credentials, and the template/file/branch/deploy-key endpoints.
+Repository names remain the stable organization ID. The platform workflow's
+`initialConfig` AST is the authoritative initial file definition: it includes
+upload directory rules, the tenant organization ID, an empty API-key placeholder,
+and `main`/`dev`/`test` host mappings. Subsequent uploads resolve the API key
+outside Git. The config is generated once during signup, not on node restart.
+
+The sequence is not transactional. Failure retains the platform organization
+with `provisioning.status: "failed"` and database/tenant/repository stage status.
+A partial GitHub failure can leave a repository or branch for investigation;
+automated recovery, rollback, and cleanup are not implemented. A duplicate
+repository creation is an error rather than permission to overwrite it.
+Hostname availability is checked before creation; concurrent signups still
+require database-enforced uniqueness.
+
+This path prepares the repository through APIs; it does not clone a local
+checkout or run `coc upload`. Initial application publication remains a separate
+next stage. Cluster UI creation only selects existing storage and creates
+cluster/server resources; it does not repeat signup. Cluster master checkout and application publishing
+remain separate from signup's database and repository creation.
+
+Initialize after the server is ready:
 
 ```js
 const Organizations = await import("@cocreate/organizations");
 await Organizations.init(server);
 ```
 
-Initialization attaches `server.organizations`. Its `provision(data)` method
-clones the public site template into the isolated local workspace, attempts the
-managed repository backup, and then runs `coc upload`. Organization signup
-awaits that full sequence after all required database writes succeed. The
-successful response provides the organization URL, which the browser assigns
-to the action button's `href`; the action runner follows it only after the
-button's remaining actions finish. Missing GitHub credentials or a remote
-outage set `git.backup.status` to `failed` without blocking the upload, while an
-upload failure marks provisioning failed and prevents the redirect. Other
-services, including Server AI, call the same provisioning method when an
-organization checkout is needed; they do not implement GitHub or cloning logic
-themselves.
+The old `server.organizations.provision` Git/mirror creation path is removed.
+Signup is the primary managed organization/database/repository creation route.
+The real-workflow signup integration tests are in CoCreate App's
+`test/bootstrap-workflow.test.js`; they replace the obsolete native Git
+provisioning test fixtures.
 
-Provisioning configuration is loaded from the `organizations` configuration
-namespace and `servers_config` records with `type: "organizations"`. GitHub
-credentials come from the provider-native `token` field in the configured
-platform API record and are passed to Git
-through process-local headers, never repository URLs or saved Git config.
+### Repository access during signup
+
+After provisioning the tenant database and initial organization/user/key data, the server generates a repository-specific RSA SSH key pair. It stores a disabled pending credential in the tenant's `apis` before calling `create-organization-repository`; only the public key and API-record ID enter that workflow. The workflow creates/configures the repository, reads GitHub SSH host verification keys over HTTPS, and registers a write-enabled deploy key through `create-repository-deploy-key`. Repository metadata includes its SSH clone URL, HTTPS clone URL, credential API ID, and deploy-key ID.
+
+The server then activates the tenant API record with the returned references and host keys before reporting signup ready. No private key is copied into the platform organization, workflow payload, GitHub request, repository config or signup response. Failed registration/persistence leaves signup failed and its credential pending; retries/cleanup are not automatic. GitHub integration credentials require repository Administration write permission to register deploy keys. Deploy keys have no built-in expiration; explicit rotation is deferred. GitHub may still revoke/delete keys, including when the PAT used to create a deploy key is deleted.
+
+Node masters retrieve this credential from their own organization's API record at startup and before shutdown push. Rotation and initial application upload remain separate work.
