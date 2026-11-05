@@ -391,6 +391,7 @@ async function createOrganization(data) {
                 initialUpload: { enabled: true, completed: false }
             }
         ];
+        cluster.repositories = structuredClone(repositories);
         for (const [scope, host] of [[server.organization_id, socket.host], [organizationId, hostname]]) {
             const stored = await checkedSend({
                 method: 'object.update', array: 'clusters', organization_id: scope, host,
@@ -415,6 +416,8 @@ async function createOrganization(data) {
             }
         });
 
+        await server.manager.createServer(cluster);
+
         const completedAt = new Date().toISOString();
         await checkedSend({
             method: 'object.update',
@@ -435,7 +438,8 @@ async function createOrganization(data) {
         });
 
         response.success = true;
-        response.message = "Organization, database, cluster, and repository created";
+        response.message = "Organization, database, cluster, repository, and server created";
+        response.redirect = `https://${hostname}/auth/`;
         response.organization = {
             _id: organizationId,
             name,

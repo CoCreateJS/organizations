@@ -106,8 +106,18 @@ the new tenant's identity or provisioning credentials.
    repository from the template's `main`, commits the initial upload config, and
    creates `dev` and `test` from that same commit. Repository references are
    retained on the platform and tenant organization records.
-6. Mark signup ready and return a safe organization summary. Bootstrap and
-   deployment credentials are never returned to the client.
+6. Await `server.manager.createServer(cluster)` with the completed cluster and
+   registered repositories. Manager uses cluster.initialDeployment and persists
+   server inventory and provider identity in both scopes.
+7. Mark signup ready and return a safe organization summary plus
+   `https://<tenant-host>/auth/`. Bootstrap and deployment credentials, and the
+   internal Manager response, are never returned to the client.
+
+The client emits createdOrganization after that success. Its existing disabled
+signup button keeps the spinner visible through timeout(60000); Actions then
+follows the returned href after the chain finishes. Creation failure aborts the
+chain without redirecting. The fixed delay does not verify startup or upload
+completion; those continue on the tenant node.
 
 The workflow source records live in CoCreate App's
 `src/apps/workflows/config/{data,organization,cluster,repository}.js`. Stable record IDs
@@ -170,7 +180,7 @@ Node masters retrieve this credential from their own organization's API record a
 
 The cluster has its own server-generated `_id`, with `name` equal to the generated organization ID, `type: 'organization'`, and the tenant's primary hostname. The platform record is created first; its definition is then copied into the tenant database using the same `_id`. Scope metadata remains local to each database. `organizations.clusterProvisioning` supplies trusted deployment defaults; client cluster IDs, names, types, and hosts cannot override the generated identity. The default `scaleIn.minClusterSize` is explicitly 0, and overrides must be nonnegative integers. `initialDeployment` is required and copied to both cluster records: signup currently uses cloud API `65f8ca227b39a3c1a8904e02`, region `us-east-1`, and VM type `t3a.small` from trusted configuration. These are static defaults for the future deployment selection UI; client signup input cannot override them today.
 
-The default record creates the identity and minimum-scale policy. Cloud, storage, routing, binary and sizing settings must be supplied through trusted `clusterProvisioning` or configured before deployment; signup does not guess those credentials or provision a VM. The `create-organization-cluster` workflow also writes `cluster_id` onto the corresponding organization in each scope. A failed platform or tenant cluster write cannot complete signup. This step does not create or modify tenant runtime startup scripts. The separate platform deployment processor uses cluster.manager.for as the node organization ID without changing the platform CRUD execution scope.
+The default record creates the identity and minimum-scale policy. Cloud, storage, routing, binary and sizing settings must be supplied through trusted `clusterProvisioning` or configured before deployment; signup does not guess those credentials and now requires the configured deployment path to succeed. The `create-organization-cluster` workflow also writes `cluster_id` onto the corresponding organization in each scope. A failed platform or tenant cluster write cannot complete signup. This step does not create or modify tenant runtime startup scripts. The separate platform deployment processor uses cluster.manager.for as the node organization ID without changing the platform CRUD execution scope.
 
 ### Cluster-owned repositories
 
@@ -215,4 +225,5 @@ two values identify the platform, and for is the tenant organization ID. Signup 
 these from trusted runtime context and stores the same relationship in both cluster copies.
 name starts as the generated organization ID but is a display label and can be renamed.
 initialDeployment and repositories are top-level cluster configuration. Repository setup
-populates both arrays before signup is ready; deployment is triggered later by Mesh.
+populates both arrays before awaiting Manager.createServer. Mesh retains its later
+activation and return-from-zero creation path.
