@@ -46,16 +46,16 @@
     }
   },
   "dependencies": {
-    "@cocreate/actions": "^1.24.0",
-    "@cocreate/config": "^1.21.0",
-    "@cocreate/crud-client": "^1.37.0",
-    "@cocreate/elements": "^1.46.0",
-    "@cocreate/observer": "^1.23.0",
-    "@cocreate/utils": "^1.54.0",
-    "@cocreate/render": "^1.51.0"
+    "@cocreate/actions": "^2.0.0",
+    "@cocreate/config": "^2.0.0",
+    "@cocreate/crud-client": "^2.0.0",
+    "@cocreate/elements": "^2.0.0",
+    "@cocreate/observer": "^2.0.0",
+    "@cocreate/utils": "^2.0.0",
+    "@cocreate/render": "^2.0.0"
   },
   "devDependencies": {
-    "@cocreate/webpack": "^1.9.0"
+    "@cocreate/webpack": "^2.0.0"
   },
   "allowScripts": {
     "@cocreate/actions@1.21.4": true,
