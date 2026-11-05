@@ -1,3 +1,22 @@
+# [3.0.0](https://github.com/CoCreateJS/organizations/compare/v2.0.0...v3.0.0) (2026-11-05)
+
+
+### Bug Fixes
+
+* await initial server creation during organization signup ([a3e25f6](https://github.com/CoCreateJS/organizations/commit/a3e25f64d33ec31b555ffb7dd4d16c4386794d5e))
+* upgrade CoCreate dependencies to v2 ([5e27adc](https://github.com/CoCreateJS/organizations/commit/5e27adca6fc6ded09c35c0a79936f674c734ddb3))
+
+
+### Features
+
+* orchestrate organization signup through managed workflows ([48fa21f](https://github.com/CoCreateJS/organizations/commit/48fa21f77e1a3183f54c4a038fc08c13a2a60a00))
+* prepare managed cluster documents during organization setup ([6c18e86](https://github.com/CoCreateJS/organizations/commit/6c18e860e4f1f3f7470394835160656f6e19b56e))
+
+
+### BREAKING CHANGES
+
+* Organization creation requires enabled database, tenant initialization, and repository workflows. The server.organizations.provision interface and its local Git/upload configuration are removed.
+
 # [2.0.0](https://github.com/CoCreateJS/organizations/compare/v1.32.0...v2.0.0) (2026-11-02)
 
 
