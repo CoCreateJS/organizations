@@ -26,6 +26,7 @@ import { resolveOrganizationsConfig } from './config.js';
 import { requireBootstrapStorage } from './bootstrap.js';
 import { createRepositoryCredential, githubKnownHosts } from './repository-credential.js';
 import { isDeepStrictEqual } from 'node:util';
+import { createClusterManagementAccess } from './cluster-management.js';
 
 let server;
 
@@ -111,6 +112,9 @@ async function createOrganization(data) {
     let organizationRegistered = false;
     let databaseAttached = false;
     let tenantInitialized = false;
+    let clusterInitialized = false;
+    let managementInitialized = false;
+    let clusterId;
     let repositoryInitialized = false;
     try {
         if (!socket?.user_id || !socket.organization_id ||
@@ -164,10 +168,19 @@ async function createOrganization(data) {
         const databaseSettings = organizationsConfig.databaseProvisioning || {};
         const databaseWorkflow = organizationsConfig.databaseWorkflow || 'create-organization-database';
         const organizationWorkflow = organizationsConfig.organizationWorkflow || 'create-organization';
+        const clusterWorkflow = organizationsConfig.clusterWorkflow || 'create-organization-cluster';
+        const clusterSettings = structuredClone(organizationsConfig.clusterProvisioning || {});
+        if (!Number.isInteger(clusterSettings.scaleIn?.minClusterSize) || clusterSettings.scaleIn.minClusterSize < 0) {
+            throw new Error('Organization cluster requires a nonnegative integer minimum cluster size');
+        }
+        if (!['cloud', 'region', 'vmType'].every(key => typeof clusterSettings.initialDeployment?.[key] === 'string' && clusterSettings.initialDeployment[key].trim())) {
+            throw new Error('Organization cluster requires initialDeployment cloud, region and VM type');
+        }
         const repositoryWorkflow = organizationsConfig.repositoryWorkflow || 'create-organization-repository';
         const repositorySettings = organizationsConfig.repositoryProvisioning || {};
         await requireEnabledPlatformWorkflow(databaseWorkflow, socket.host);
         const organizationDefinition = await requireEnabledPlatformWorkflow(organizationWorkflow, socket.host);
+        const clusterDefinition = await requireEnabledPlatformWorkflow(clusterWorkflow, socket.host);
         await requireEnabledPlatformWorkflow(repositoryWorkflow, socket.host);
 
         organizationId = ObjectId().toString();
@@ -186,6 +199,7 @@ async function createOrganization(data) {
         delete organization.bootstrapStorage;
         delete organization.storage;
         delete organization.git;
+        delete organization.cluster_id;
         for (const key of Object.keys(organization)) {
             if (/^host(?:\[0\]|\.0)\./.test(key)) delete organization[key];
         }
@@ -255,10 +269,10 @@ async function createOrganization(data) {
             host: tenantHosts,
             provisioning: {
                 ...provisioning,
-                status: 'initializing-repository',
+                status: 'initializing-cluster',
                 database: { status: 'ready' },
                 tenant: { status: 'ready' },
-                repository: { status: 'pending' }
+                cluster: { status: 'pending' }, repository: { status: 'pending' }
             }
         };
         await checkedSend({
@@ -299,6 +313,44 @@ async function createOrganization(data) {
         }
         tenantInitialized = true;
 
+        // Create one identity and one definition; each invocation persists that same cluster.
+        clusterId = ObjectId().toString();
+        const cluster = {
+            ...clusterSettings, _id: clusterId, name: organizationId,
+            type: 'organization', host: hostname,
+            repositories: structuredClone(clusterSettings.repositories || []),
+            manager: {
+                organization_id: server.organization_id,
+                host: server.host || socket.host,
+                for: organizationId
+            }
+        };
+        delete cluster.organization_id;
+        for (const key of Object.keys(cluster)) if (key.startsWith('$')) delete cluster[key];
+        const clusterInput = { organizationId, cluster };
+        const platformCluster = await runWorkflow(clusterWorkflow, server.organization_id, socket.host, structuredClone(clusterInput));
+        if (platformCluster.initialized !== true || platformCluster.cluster?._id !== clusterId || !isDeepStrictEqual(platformCluster.cluster?.manager, cluster.manager)) {
+            throw new Error('Platform organization cluster initialization did not complete');
+        }
+        await checkedSend({
+            method: 'object.update', organization_id: organizationId, host: hostname,
+            array: 'workflows', upsert: true,
+            object: { ...clusterDefinition, organization_id: organizationId }
+        });
+        const tenantDefinition = structuredClone(platformCluster.cluster);
+        delete tenantDefinition.organization_id;
+        for (const key of Object.keys(tenantDefinition)) if (key.startsWith('$')) delete tenantDefinition[key];
+        const tenantCluster = await runWorkflow(clusterWorkflow, organizationId, hostname, { organizationId, cluster: tenantDefinition });
+        if (tenantCluster.initialized !== true || tenantCluster.cluster?._id !== clusterId || !isDeepStrictEqual(tenantCluster.cluster?.manager, cluster.manager)) {
+            throw new Error('Tenant organization cluster initialization did not complete');
+        }
+        clusterInitialized = true;
+
+        await createClusterManagementAccess(server, {
+            organizationId, clusterId, parentHost: server.host || socket.host
+        });
+        managementInitialized = true;
+
         // Keep a pending credential in the tenant DB before registering its public key.
         const repositoryCredential = await createRepositoryCredential(ObjectId().toString());
         await checkedSend({
@@ -328,6 +380,24 @@ async function createOrganization(data) {
             }
         });
         if (!activatedCredential.object?.length) throw new Error('Repository credential was not activated');
+        const repositories = [
+            ...(Array.isArray(clusterSettings.repositories) ? clusterSettings.repositories : []),
+            {
+                url: repository.git.clone_url, api: repositoryCredential._id,
+                branch: repository.git.checkout_branch || 'main', remote: 'origin',
+                localFsRoot: '../', directory: repository.git.repository,
+                onStartup: 'clone', onShutdown: 'commit-and-push',
+                startupTimeoutMs: 60000, shutdownTimeoutMs: 10000,
+                initialUpload: { enabled: true, completed: false }
+            }
+        ];
+        for (const [scope, host] of [[server.organization_id, socket.host], [organizationId, hostname]]) {
+            const stored = await checkedSend({
+                method: 'object.update', array: 'clusters', organization_id: scope, host,
+                object: { _id: clusterId, repositories: structuredClone(repositories) }
+            });
+            if (!stored.object?.length) throw new Error('Cluster repository registration did not complete');
+        }
         repositoryInitialized = true;
         await checkedSend({
             method: 'object.update',
@@ -340,7 +410,7 @@ async function createOrganization(data) {
                 provisioning: {
                     ...provisioning, status: 'ready',
                     database: { status: 'ready' }, tenant: { status: 'ready' },
-                    repository: { status: 'ready' }
+                    cluster: { status: 'ready' }, management: { status: 'ready' }, repository: { status: 'ready' }
                 }
             }
         });
@@ -358,17 +428,18 @@ async function createOrganization(data) {
                     status: 'ready',
                     database: { status: 'ready' },
                     tenant: { status: 'ready' },
-                    repository: { status: 'ready' },
+                    cluster: { status: 'ready' }, management: { status: 'ready' }, repository: { status: 'ready' },
                     completed_at: completedAt
                 }
             }
         });
 
         response.success = true;
-        response.message = "Organization, database, and repository created";
+        response.message = "Organization, database, cluster, and repository created";
         response.organization = {
             _id: organizationId,
             name,
+            cluster_id: clusterId,
             host: tenantHosts,
             provisioning: { ...provisioning, status: 'ready', completed_at: completedAt }
         };
@@ -391,6 +462,8 @@ async function createOrganization(data) {
                             error: String(error.message || error).slice(0, 500),
                             database: { status: databaseAttached ? 'ready' : 'failed' },
                             tenant: { status: tenantInitialized ? 'ready' : 'failed' },
+                            cluster: { status: clusterInitialized ? 'ready' : 'failed' },
+                            management: { status: managementInitialized ? 'ready' : 'failed' },
                             repository: { status: repositoryInitialized ? 'ready' : 'failed' }
                         }
                     }

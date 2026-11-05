@@ -101,18 +101,19 @@ the new tenant's identity or provisioning credentials.
 3. Install the platform-defined `create-organization` workflow into the tenant
    database, then execute it in tenant context to write the organization,
    authenticated user profile, credential, and generated keys.
-4. Run `create-organization-repository` in platform context. It creates a private
+4. Generate one organization cluster ID and run `create-organization-cluster` in platform context, then install the trusted definition and run it in tenant context with the same cluster. Both organization records receive its `cluster_id`.
+5. Run `create-organization-repository` in platform context. It creates a private
    repository from the template's `main`, commits the initial upload config, and
    creates `dev` and `test` from that same commit. Repository references are
    retained on the platform and tenant organization records.
-5. Mark signup ready and return a safe organization summary. Bootstrap and
+6. Mark signup ready and return a safe organization summary. Bootstrap and
    deployment credentials are never returned to the client.
 
 The workflow source records live in CoCreate App's
-`src/apps/workflows/config/{data,organization,repository}.js`. Stable record IDs
+`src/apps/workflows/config/{data,organization,cluster,repository}.js`. Stable record IDs
 allow repeatable uploads without duplicate definitions. Workflow names are
 configurable through `organizations.databaseWorkflow`, `organizationWorkflow`,
-and `repositoryWorkflow`. All three enabled platform definitions are checked
+`clusterWorkflow`, and `repositoryWorkflow`. All four enabled platform definitions are checked
 before a new organization record is created.
 
 The bootstrap object requires non-empty `name` and `provider` strings; remaining
@@ -164,3 +165,54 @@ After provisioning the tenant database and initial organization/user/key data, t
 The server then activates the tenant API record with the returned references and host keys before reporting signup ready. No private key is copied into the platform organization, workflow payload, GitHub request, repository config or signup response. Failed registration/persistence leaves signup failed and its credential pending; retries/cleanup are not automatic. GitHub integration credentials require repository Administration write permission to register deploy keys. Deploy keys have no built-in expiration; explicit rotation is deferred. GitHub may still revoke/delete keys, including when the PAT used to create a deploy key is deleted.
 
 Node masters retrieve this credential from their own organization's API record at startup and before shutdown push. Rotation and initial application upload remain separate work.
+
+### Organization cluster
+
+The cluster has its own server-generated `_id`, with `name` equal to the generated organization ID, `type: 'organization'`, and the tenant's primary hostname. The platform record is created first; its definition is then copied into the tenant database using the same `_id`. Scope metadata remains local to each database. `organizations.clusterProvisioning` supplies trusted deployment defaults; client cluster IDs, names, types, and hosts cannot override the generated identity. The default `scaleIn.minClusterSize` is explicitly 0, and overrides must be nonnegative integers. `initialDeployment` is required and copied to both cluster records: signup currently uses cloud API `65f8ca227b39a3c1a8904e02`, region `us-east-1`, and VM type `t3a.small` from trusted configuration. These are static defaults for the future deployment selection UI; client signup input cannot override them today.
+
+The default record creates the identity and minimum-scale policy. Cloud, storage, routing, binary and sizing settings must be supplied through trusted `clusterProvisioning` or configured before deployment; signup does not guess those credentials or provision a VM. The `create-organization-cluster` workflow also writes `cluster_id` onto the corresponding organization in each scope. A failed platform or tenant cluster write cannot complete signup. This step does not create or modify tenant runtime startup scripts. The separate platform deployment processor uses cluster.manager.for as the node organization ID without changing the platform CRUD execution scope.
+
+### Cluster-owned repositories
+
+After the repository workflow returns its GitHub details and the deploy key is
+activated, signup appends its repository definition to the already-created
+cluster in platform and tenant scope. Both receive the same URL, credential
+reference, main branch, relative localFsRoot ../, directory, lifecycle timeouts
+and initialUpload { enabled:true, completed:false }. Existing trusted repository
+entries from clusterProvisioning are retained. Either failed cluster write
+prevents signup readiness.
+
+The URL identifies the array entry. No repository entry ID or server-config
+repository record is generated. Organization git metadata is retained for
+reference, but Cluster startup reads cluster.repositories instead of deriving
+runtime configuration from that metadata. Cluster primary now runs initial publication after checkout and service
+readiness, with a cluster/URL reservation. Signup and cloning alone do not mark
+initialUpload completed; only successful upload does.
+
+### Cluster management credential
+
+After both organization-cluster copies exist, signup calls
+src/server/cluster-management.js. It reads the platform App's keyless permission
+reference (6b0700000000000000000021), generates a Utils UUID, and creates an active
+platform keys record with cluster/tenant ownership metadata, neither admin nor
+default access. No tenant transport API or endpoint is created.
+
+The first-VM handler resolves that key and stores it in manager.apiKey on both
+server copies, alongside the parent organization ID and hostname. Cluster reads
+this object into the primary runtime during its existing startup lookup.
+AutoScaler uses server.manager.send to POST to the parent's /manager path, rather
+than using a configured transport API. The key stays out of Git, signup responses,
+VM workflow inputs and cloud startup scripts.
+
+The permission reference limits create-instance/delete-instance endpoints through
+Authorize's $endpoint operator. Cluster/provider AST predicates remain separate.
+A failed management-key write prevents signup readiness. Existing clusters and
+additional cluster UI creation are not automatically backfilled.
+
+
+Managed cluster metadata is stored as manager: { organization_id, host, for }: the first
+two values identify the platform, and for is the tenant organization ID. Signup assigns
+these from trusted runtime context and stores the same relationship in both cluster copies.
+name starts as the generated organization ID but is a display label and can be renamed.
+initialDeployment and repositories are top-level cluster configuration. Repository setup
+populates both arrays before signup is ready; deployment is triggered later by Mesh.

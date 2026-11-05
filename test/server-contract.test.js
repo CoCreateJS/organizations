@@ -50,6 +50,7 @@ test('workflow configuration is isolated between server instances and contains n
     t.mock.method(config, 'query', async () => undefined);
     const server = { organization_id: 'platform', crud: {} };
     const customized = await resolveOrganizationsConfig(server, {
+        clusterProvisioning: { scaleIn: { minClusterSize: 1 } },
         repositoryProvisioning: { api: 'custom-github' }, databaseProvisioning: { regionName: 'region-one' }
     });
     assert.equal(customized.repositoryProvisioning.api, 'custom-github');
@@ -57,6 +58,8 @@ test('workflow configuration is isolated between server instances and contains n
     assert.equal(clean.repositoryProvisioning.api, defaults.repositoryProvisioning.api);
     assert.equal(defaults.repositoryProvisioning.api, 'github-organizations');
     assert.deepEqual(clean.databaseProvisioning, {});
+    assert.equal(clean.clusterProvisioning.scaleIn.minClusterSize, 0);
+    assert.equal(customized.clusterProvisioning.scaleIn.minClusterSize, 1);
     for (const obsolete of ['localFsRoot', 'gitBinary', 'uploadBinary', 'templateUrl']) assert.equal(Object.hasOwn(clean, obsolete), false);
 });
 
