@@ -479,7 +479,7 @@ async function createOrganization(data) {
         response.message = error.message || "Unable to create the organization";
         response.error = response.message;
     }
-    return server.wsManager.send(response);
+    return server.send(response);
 }
 
 async function checkedSend(request) {
@@ -516,7 +516,7 @@ async function createEnvironments(data) {
         // If there are validation errors, include them in the response and send immediately
         if (data.success === false) {
             if (server && server.wsManager) {
-                return server.wsManager.send(data);
+                return server.send(data);
             }
             return;
         }
@@ -578,13 +578,13 @@ async function createEnvironments(data) {
         }
 
         if (server && server.wsManager) {
-            server.wsManager.send(data);
+            server.send(data);
         }
     } catch (error) {
         if (data.socket) {
             errorHandler(data, error);
             if (server && server.wsManager) {
-                server.wsManager.send(data);
+                server.send(data);
             }
         }
     }
