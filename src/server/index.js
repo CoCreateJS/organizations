@@ -30,6 +30,13 @@ import { createClusterManagementAccess } from './cluster-management.js';
 
 let server;
 
+function withoutSocket(data) {
+    if (!data || typeof data !== "object") return data;
+    const envelope = { ...data };
+    delete envelope.socket;
+    return envelope;
+}
+
 /**
  * Standard error state structure normalization helper.
  * @private
@@ -98,13 +105,13 @@ async function requireEnabledPlatformWorkflow(name, host) {
  * @environment server
  */
 async function createOrganization(data) {
-    const socket = data.socket;
     const response = {
         method: "createOrganization",
         uuid: data.uuid,
-        socket,
-        host: socket?.host,
-        organization_id: socket?.organization_id,
+        host: data.host,
+        organization_id: data.organization_id,
+        clientId: data.clientId,
+        socketId: data.socketId,
         broadcastClient: false,
         success: false
     };
@@ -117,8 +124,7 @@ async function createOrganization(data) {
     let clusterId;
     let repositoryInitialized = false;
     try {
-        if (!socket?.user_id || !socket.organization_id ||
-            (socket.expires && Date.now() >= Number(socket.expires))) {
+        if (!data.user_id || !data.organization_id) {
             throw new Error("Sign in before creating an organization");
         }
         const details = data.organization;
@@ -131,18 +137,18 @@ async function createOrganization(data) {
         }
         const hosts = createOrganizationHosts(details, hostname);
 
-        // Source scope and identity come from the authenticated socket, never the payload.
-        const source = { organization_id: socket.organization_id, host: socket.host };
+        // SocketServer stamps the authenticated identity and source scope onto the message.
+        const source = { organization_id: data.organization_id, host: data.host };
         const credentials = await checkedSend({
             ...source, method: "object.read", array: "keys", object: [],
-            filter: { limit: 2, query: { type: "user", key: socket.user_id } }
+            filter: { limit: 2, query: { type: "user", key: data.user_id } }
         });
         if (credentials.object?.length !== 1) {
             throw new Error("Unable to resolve the signed-in user's credential");
         }
         const credential = credentials.object[0];
         if (typeof credential.array !== "string" || !credential.array ||
-            String(credential.key) !== String(socket.user_id)) {
+            String(credential.key) !== String(data.user_id)) {
             throw new Error("The user credential is missing its profile reference");
         }
         const profiles = await checkedSend({
@@ -150,7 +156,7 @@ async function createOrganization(data) {
             object: [{ _id: credential.key }], filter: { limit: 1 }
         });
         const profile = profiles.object?.[0];
-        if (!profile || String(profile._id) !== String(socket.user_id)) {
+        if (!profile || String(profile._id) !== String(data.user_id)) {
             throw new Error("Unable to find the signed-in user's profile");
         }
 
@@ -178,10 +184,10 @@ async function createOrganization(data) {
         }
         const repositoryWorkflow = organizationsConfig.repositoryWorkflow || 'create-organization-repository';
         const repositorySettings = organizationsConfig.repositoryProvisioning || {};
-        await requireEnabledPlatformWorkflow(databaseWorkflow, socket.host);
-        const organizationDefinition = await requireEnabledPlatformWorkflow(organizationWorkflow, socket.host);
-        const clusterDefinition = await requireEnabledPlatformWorkflow(clusterWorkflow, socket.host);
-        await requireEnabledPlatformWorkflow(repositoryWorkflow, socket.host);
+        await requireEnabledPlatformWorkflow(databaseWorkflow, data.host);
+        const organizationDefinition = await requireEnabledPlatformWorkflow(organizationWorkflow, data.host);
+        const clusterDefinition = await requireEnabledPlatformWorkflow(clusterWorkflow, data.host);
+        await requireEnabledPlatformWorkflow(repositoryWorkflow, data.host);
 
         organizationId = ObjectId().toString();
         const provisioning = {
@@ -242,7 +248,7 @@ async function createOrganization(data) {
         });
         organizationRegistered = true;
 
-        const database = await runWorkflow(databaseWorkflow, server.organization_id, socket.host, {
+        const database = await runWorkflow(databaseWorkflow, server.organization_id, data.host, {
             ...databaseSettings,
             organizationId
         });
@@ -278,7 +284,7 @@ async function createOrganization(data) {
         await checkedSend({
             method: 'object.update',
             organization_id: server.organization_id,
-            host: socket.host,
+            host: data.host,
             array: 'organizations',
             object: {
                 _id: organizationId,
@@ -321,14 +327,14 @@ async function createOrganization(data) {
             repositories: structuredClone(clusterSettings.repositories || []),
             manager: {
                 organization_id: server.organization_id,
-                host: server.host || socket.host,
+                host: server.host || data.host,
                 for: organizationId
             }
         };
         delete cluster.organization_id;
         for (const key of Object.keys(cluster)) if (key.startsWith('$')) delete cluster[key];
         const clusterInput = { organizationId, cluster };
-        const platformCluster = await runWorkflow(clusterWorkflow, server.organization_id, socket.host, structuredClone(clusterInput));
+        const platformCluster = await runWorkflow(clusterWorkflow, server.organization_id, data.host, structuredClone(clusterInput));
         if (platformCluster.initialized !== true || platformCluster.cluster?._id !== clusterId || !isDeepStrictEqual(platformCluster.cluster?.manager, cluster.manager)) {
             throw new Error('Platform organization cluster initialization did not complete');
         }
@@ -347,7 +353,7 @@ async function createOrganization(data) {
         clusterInitialized = true;
 
         await createClusterManagementAccess(server, {
-            organizationId, clusterId, parentHost: server.host || socket.host
+            organizationId, clusterId, parentHost: server.host || data.host
         });
         managementInitialized = true;
 
@@ -357,7 +363,7 @@ async function createOrganization(data) {
             method: 'object.update', upsert: true, organization_id: organizationId, host: hostname,
             array: 'apis', object: repositoryCredential
         });
-        const repository = await runWorkflow(repositoryWorkflow, server.organization_id, socket.host, {
+        const repository = await runWorkflow(repositoryWorkflow, server.organization_id, data.host, {
             ...repositorySettings,
             organizationId,
             credentialId: repositoryCredential._id,
@@ -392,7 +398,7 @@ async function createOrganization(data) {
             }
         ];
         cluster.repositories = structuredClone(repositories);
-        for (const [scope, host] of [[server.organization_id, socket.host], [organizationId, hostname]]) {
+        for (const [scope, host] of [[server.organization_id, data.host], [organizationId, hostname]]) {
             const stored = await checkedSend({
                 method: 'object.update', array: 'clusters', organization_id: scope, host,
                 object: { _id: clusterId, repositories: structuredClone(repositories) }
@@ -422,7 +428,7 @@ async function createOrganization(data) {
         await checkedSend({
             method: 'object.update',
             organization_id: server.organization_id,
-            host: socket.host,
+            host: data.host,
             array: 'organizations',
             object: {
                 _id: organizationId,
@@ -456,7 +462,7 @@ async function createOrganization(data) {
                 await checkedSend({
                     method: 'object.update',
                     organization_id: server.organization_id,
-                    host: socket.host,
+                    host: data.host,
                     array: 'organizations',
                     object: {
                         _id: organizationId,
@@ -515,10 +521,7 @@ async function createEnvironments(data) {
 
         // If there are validation errors, include them in the response and send immediately
         if (data.success === false) {
-            if (server && server.wsManager) {
-                return server.send(data);
-            }
-            return;
+            return server.send(withoutSocket(data));
         }
 
         const Data = {};
@@ -559,17 +562,27 @@ async function createEnvironments(data) {
             }
 
             for (let host of hostname) {
-                organizations.method = "object.create";
-                organizations.host = host;
-                organizations = await server.crud.send(organizations);
-
-                users.method = "object.create";
-                users.host = host;
-                users = await server.crud.send(users);
-
-                keys.method = "object.create";
-                keys.host = host;
-                keys = await server.crud.send(keys);
+                await server.crud.send({
+                    ...Data,
+                    method: "object.create",
+                    host,
+                    array: "organizations",
+                    object: organizations.object
+                });
+                await server.crud.send({
+                    ...Data,
+                    method: "object.create",
+                    host,
+                    array: "users",
+                    object: users.object
+                });
+                await server.crud.send({
+                    ...Data,
+                    method: "object.create",
+                    host,
+                    array: "keys",
+                    object: keys.object
+                });
             }
         }
 
@@ -577,16 +590,10 @@ async function createEnvironments(data) {
             data.success = true;
         }
 
-        if (server && server.wsManager) {
-            server.send(data);
-        }
+        server.send(withoutSocket(data));
     } catch (error) {
-        if (data.socket) {
-            errorHandler(data, error);
-            if (server && server.wsManager) {
-                server.send(data);
-            }
-        }
+        errorHandler(data, error);
+        server.send(withoutSocket(data));
     }
 }
 

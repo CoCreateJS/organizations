@@ -78,7 +78,12 @@ test('an empty CRUD error list is treated as an empty lookup, without provisioni
         wsManager: { on() {}, send() { assert.fail("Component must use server.send"); } }
     });
     await service.create({
-        socket: { organization_id: 'source', user_id: 'user', host: 'source.test' },
+        organization_id: 'source',
+        user_id: 'user',
+        host: 'source.test',
+        socketId: 'socket-1',
+        clientId: 'client-1',
+        socket: { organization_id: 'forged', user_id: 'forged', host: 'forged.test' },
         organization: { host: [{ name: 'tenant.test' }] }
     });
     assert.equal(response.success, false);
