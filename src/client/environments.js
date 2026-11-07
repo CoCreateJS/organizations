@@ -1,5 +1,5 @@
 import Actions from "@cocreate/actions";
-import Crud from "@cocreate/crud-client";
+import { crudClient as Crud } from '@cocreate/crud/client';
 import { render } from "@cocreate/render";
 
 let initialized = false;
