@@ -30,13 +30,6 @@ import { createClusterManagementAccess } from './cluster-management.js';
 
 let server;
 
-function withoutSocket(data) {
-    if (!data || typeof data !== "object") return data;
-    const envelope = { ...data };
-    delete envelope.socket;
-    return envelope;
-}
-
 /**
  * Standard error state structure normalization helper.
  * @private
@@ -521,7 +514,7 @@ async function createEnvironments(data) {
 
         // If there are validation errors, include them in the response and send immediately
         if (data.success === false) {
-            return server.send(withoutSocket(data));
+            return server.send({ ...data });
         }
 
         const Data = {};
@@ -590,10 +583,10 @@ async function createEnvironments(data) {
             data.success = true;
         }
 
-        server.send(withoutSocket(data));
+        server.send({ ...data });
     } catch (error) {
         errorHandler(data, error);
-        server.send(withoutSocket(data));
+        server.send({ ...data });
     }
 }
 
