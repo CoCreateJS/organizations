@@ -1,3 +1,12 @@
+## [3.0.1](https://github.com/CoCreateJS/organizations/compare/v3.0.0...v3.0.1) (2026-11-07)
+
+
+### Bug Fixes
+
+* preserve socket data in organization responses ([57bdd5d](https://github.com/CoCreateJS/organizations/commit/57bdd5dde26141eda91a293cd750e1550337f8b8))
+* route component responses through unified server send ([9279a0a](https://github.com/CoCreateJS/organizations/commit/9279a0a2851f14da26a190ff431656765721eb13))
+* route organization responses through server send ([14f7d3c](https://github.com/CoCreateJS/organizations/commit/14f7d3c5b65a5ec3bdb8b1d0c11a26972a66ec60))
+
 # [3.0.0](https://github.com/CoCreateJS/organizations/compare/v2.0.0...v3.0.0) (2026-11-05)
 
 
