@@ -95,18 +95,18 @@ the new tenant's identity or provisioning credentials.
 `server.organizations.create(data)` coordinates these workflows in order:
 
 1. Register a platform organization with a server-generated ID.
-2. Run `create-organization-database` in platform context. The workflow creates
+2. Run `createOrganizationStorage` in platform context. The workflow creates
    provider storage, persists its `bootstrapStorage` on that platform record,
    and returns the same object. The handler verifies that persistence.
 3. Install the platform-defined `create-organization` workflow into the tenant
    database, then execute it in tenant context to write the organization,
    authenticated user profile, credential, and generated keys.
-4. Generate one organization cluster ID and run `create-organization-cluster` in platform context, then install the trusted definition and run it in tenant context with the same cluster. Both organization records receive its `cluster_id`.
+4. Call `createClusterConfig` once, add one generated cluster ID and the tenant host, then use the same cluster object in platform and tenant CRUD scopes. Both organization records receive that `cluster_id`.
 5. Run `create-organization-repository` in platform context. It creates a private
    repository from the template's `main`, commits the initial upload config, and
    creates `dev` and `test` from that same commit. Repository references are
    retained on the platform and tenant organization records.
-6. Await `server.manager.createServer(cluster)` with the completed cluster and
+6. Await `server.managerService.createServer(cluster)` with the completed cluster and
    registered repositories. Manager uses cluster.initialDeployment and persists
    server inventory and provider identity in both scopes.
 7. Mark signup ready and return a safe organization summary plus
@@ -120,16 +120,14 @@ chain without redirecting. The fixed delay does not verify startup or upload
 completion; those continue on the tenant node.
 
 The workflow source records live in CoCreate App's
-`src/apps/workflows/config/{data,organization,cluster,repository}.js`. Stable record IDs
+`src/apps/workflows/config/{storage,organization,cluster,repository}.js`. Stable record IDs
 allow repeatable uploads without duplicate definitions. Workflow names are
-configurable through `organizations.databaseWorkflow`, `organizationWorkflow`,
-`clusterWorkflow`, and `repositoryWorkflow`. All four enabled platform definitions are checked
-before a new organization record is created.
+configurable through `organizations.storageWorkflow`, `organizationWorkflow`,
+and `repositoryWorkflow`. The database, organization, cluster config, and
+repository workflow definitions are checked before a new organization record is created.
 
-The bootstrap object requires non-empty `name` and `provider` strings; remaining
-fields pass through unchanged. The current Atlas database recipe additionally
-requires `cloudProvider`, `regionName`, and `cidrBlock` in
-`organizations.databaseProvisioning`, with configured provider credentials and
+The current Atlas storage recipe requires `cloudProvider`, `regionName`, and `cidrBlock` in
+`organizations.storageProvisioning`, with configured provider credentials and
 endpoints. That workflow remains disabled until its provider setup is complete.
 
 The repository recipe uses `organizations.repositoryProvisioning` for `api`,
@@ -178,9 +176,9 @@ Node masters retrieve this credential from their own organization's API record a
 
 ### Organization cluster
 
-The cluster has its own server-generated `_id`, with `name` equal to the generated organization ID, `type: 'organization'`, and the tenant's primary hostname. The platform record is created first; its definition is then copied into the tenant database using the same `_id`. Scope metadata remains local to each database. `organizations.clusterProvisioning` supplies trusted deployment defaults; client cluster IDs, names, types, and hosts cannot override the generated identity. The default `scaleIn.minClusterSize` is explicitly 0, and overrides must be nonnegative integers. `initialDeployment` is required and copied to both cluster records: signup currently uses cloud API `65f8ca227b39a3c1a8904e02`, region `us-east-1`, and VM type `t3a.small` from trusted configuration. These are static defaults for the future deployment selection UI; client signup input cannot override them today.
+The cluster profile comes from `createClusterConfig`. Signup adds a server-generated `_id`, sets `name` to the generated organization ID, sets `type: 'organization'`, and supplies the tenant's primary hostname and `managedOrganization`. The platform record is created first; its definition is then copied into the tenant database using the same `_id`. Scope metadata remains local to each database. Trusted `organizations.clusterProvisioning` values can override the profile's deployment/scaling defaults; client signup input cannot override generated identity fields.
 
-The default record creates the identity and minimum-scale policy. Cloud, storage, routing, binary and sizing settings must be supplied through trusted `clusterProvisioning` or configured before deployment; signup does not guess those credentials and now requires the configured deployment path to succeed. The `create-organization-cluster` workflow also writes `cluster_id` onto the corresponding organization in each scope. A failed platform or tenant cluster write cannot complete signup. This step does not create or modify tenant runtime startup scripts. The separate platform deployment processor uses cluster.manager.for as the node organization ID without changing the platform CRUD execution scope.
+The default record creates the identity and minimum-scale policy. Cloud, storage, routing, binary and sizing settings come from the `createClusterConfig` profile, with trusted `clusterProvisioning` overrides. Signup does not guess credentials and requires the configured deployment path to succeed. The handler writes the same cluster document to both scopes and updates each organization's `cluster_id`; either failed write aborts signup. This step does not create or modify tenant runtime startup scripts. The separate platform deployment processor uses `cluster.managedOrganization` as the node organization ID without changing the platform CRUD execution scope.
 
 ### Cluster-owned repositories
 
@@ -201,23 +199,9 @@ initialUpload completed; only successful upload does.
 
 ### Cluster management credential
 
-After both organization-cluster copies exist, signup calls
-src/server/cluster-management.js. It reads the platform App's keyless permission
-reference (6b0700000000000000000021), generates a Utils UUID, and creates an active
-platform keys record with cluster/tenant ownership metadata, neither admin nor
-default access. No tenant transport API or endpoint is created.
-
-The first-VM handler resolves that key and stores it in manager.apiKey on both
-server copies, alongside the parent organization ID and hostname. Cluster reads
-this object into the primary runtime during its existing startup lookup.
-AutoScaler uses server.manager.send to POST to the parent's /manager path, rather
-than using a configured transport API. The key stays out of Git, signup responses,
-VM workflow inputs and cloud startup scripts.
-
-The permission reference limits create-instance/delete-instance endpoints through
-Authorize's $endpoint operator. Cluster/provider AST predicates remain separate.
-A failed management-key write prevents signup readiness. Existing clusters and
-additional cluster UI creation are not automatically backfilled.
+The `createOrganization` workflow creates a platform-scoped managed key assigned
+the managed-cluster role and returns its secret with the organization response.
+Startup injection and the key's later consumer remain separate follow-up work.
 
 
 Managed cluster metadata is stored as manager: { organization_id, host, for }: the first

@@ -1,164 +1,98 @@
-import Observer from "@cocreate/observer";
-import Actions from "@cocreate/actions";
+import { crudClient as Crud } from '@cocreate/crud/client';
+import Actions from '@cocreate/actions';
+import Elements from '@cocreate/elements';
+import { render } from '@cocreate/render';
 
-const actionSelector = "[actions]";
+async function createAction(action) {
+    try {
+        const form = action.form;
+        if (!form) throw new Error('A form is required');
 
-function runOrganizationAction(action) {
-    return import(/* webpackChunkName: "organizations-create" */ "./organization.js")
-        .then((module) => module.create(action))
-        .catch((error) => {
-            console.error(
-                "[CoCreateOrganizations] Failed to run organization action.",
-                error
-            );
-            action.abort(error);
-        });
-}
+        const data = await Elements.getData(form);
+        const entry = data.find(item => item.array === 'organizations');
+        const organization = Array.isArray(entry?.object) ? entry.object[0] : entry?.object;
+        if (!organization) throw new Error('Organization form data are required');
 
-function runEnvironmentsAction(action) {
-    return import(/* webpackChunkName: "organizations-environments" */ "./environments.js")
-        .then((module) => module.createEnvironment(action))
-        .catch((error) => {
-            console.error(
-                "[CoCreateOrganizations] Failed to run environments action.",
-                error
-            );
-            action.abort(error);
-        });
-}
-
-// Register the action callbacks before any asynchronous segment can be needed.
-Actions.init([
-    {
-        name: "createOrganization",
-        endEvent: "createdOrganization",
-        callback: runOrganizationAction
-    },
-    {
-        name: "createEnvironments",
-        endEvent: "createdEnvironments",
-        callback: runEnvironmentsAction
+        return await create(organization, action);
+    } catch (error) {
+        finishAction(action, { error: error.message });
     }
-]);
-
-function hasAction(element, name) {
-    return (element.getAttribute("actions") || "")
-        .split(/\s*,\s*/)
-        .some((action) => action.split("(", 1)[0].trim() === name);
 }
 
-function loadCreateOrganization(element) {
-    if (!hasAction(element, "createOrganization")) return;
+async function create(organization, action) {
+    try {
+        const response = await Crud.socket.send({
+            method: 'createOrganization',
+            organization,
+            broadcastClient: false
+        });
 
-    import(/* webpackChunkName: "organizations-create" */ "./organization.js")
-        .catch((error) =>
-            console.error(
-                "[CoCreateOrganizations] Failed to load organization module.",
-                error
-            )
-        );
-}
+        if (action) {
+            if (!response?.error && response?.redirect && action.element) {
+                action.element.setAttribute('href', response.redirect);
+            }
 
-function loadCreateEnvironments(element) {
-    if (!hasAction(element, "createEnvironments")) return;
+            finishAction(action, response);
+        }
 
-    import(/* webpackChunkName: "organizations-environments" */ "./environments.js")
-        .catch((error) =>
-            console.error(
-                "[CoCreateOrganizations] Failed to load environments module.",
-                error
-            )
-        );
-}
-
-function loadElement(element) {
-    loadCreateOrganization(element);
-    loadCreateEnvironments(element);
-}
-
-Observer.init([
-    {
-        name: "CoCreateOrganizationsCreateOrganizationLoader",
-        types: ["addedNodes", "attributes"],
-        attributeFilter: ["actions"],
-        selector: actionSelector,
-        callback: (mutation) => loadCreateOrganization(mutation.target)
-    },
-    {
-        name: "CoCreateOrganizationsCreateEnvironmentsLoader",
-        types: ["addedNodes", "attributes"],
-        attributeFilter: ["actions"],
-        selector: actionSelector,
-        callback: (mutation) => loadCreateEnvironments(mutation.target)
+        return response;
+    } catch (error) {
+        if (!action) throw error;
+        finishAction(action, { error: error.message });
     }
-]);
+}
 
-document.querySelectorAll(actionSelector).forEach(loadElement);
+function finishAction(action, response) {
+    const success = !response?.error;
+    if (!success) action.abort();
 
-const CoCreateOrganizations = {
-    /**
-     *
- * @public
- * @environment client
- */
-    generateDB: (...args) =>
-        import(/* webpackChunkName: "organizations-create" */ "./organization.js").then(
-            (module) => module.generateDB(...args)
-        ),
-    /**
-     *
- * @public
- * @environment client
- */
-    create: (...args) =>
-        import(/* webpackChunkName: "organizations-create" */ "./organization.js").then(
-            (module) => module.create(...args)
-        ),
-    /**
-     *
- * @public
- * @environment client
- */
-    get: (...args) =>
-        import(/* webpackChunkName: "organizations-create" */ "./organization.js").then(
-            (module) => module.get(...args)
-        )
-};
+    const type = action.name || 'createOrganization';
+    const errorMessage =
+        typeof response?.error === 'string'
+            ? response.error
+            : response?.error?.message;
 
-export default CoCreateOrganizations;
+    render({
+        selector: '[template~="notification"]',
+        data: {
+            type,
+            status: success ? 'success' : 'error',
+            success,
+            message:
+                response?.message ||
+                errorMessage ||
+                (success
+                    ? 'Organization created'
+                    : 'Unable to complete the request. Please try again.')
+        }
+    });
+
+    if (success) action.end(response);
+}
+
+Actions.init({
+    name: 'createOrganization',
+    endEvent: 'createdOrganization',
+    callback: createAction
+});
+
+const Organizations = { create };
+
+export { create, createAction };
+export default Organizations;
 
 /**
- *
  * @name actions
  * @kind attribute
  * @environment client
  */
 
 /**
- * A simple organizations component in vanilla javascript. Easily configured using HTML5 attributes and/or JavaScript API.
- *
  * @module organizations
  * @environment client
  */
 
 /**
- * Declarative selectors recognized by this module.
- *
- * @name declarative-selectors
- * @kind member
- * @selectors
- * @environment client
- * @example
- * ```json
- * [
- *   "[actions]"
- * ]
- * ```
- */
-
-/**
- * Declarative actions supported or registered by this module.
- *
  * @name declarative-actions
  * @kind member
  * @actions
