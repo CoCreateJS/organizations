@@ -107,7 +107,7 @@ the new tenant's identity or provisioning credentials.
    creates `dev` and `test` from that same commit. Repository references are
    retained on the platform and tenant organization records.
 6. Await `server.managerService.createServer(cluster)` with the completed cluster and
-   registered repositories. Manager uses cluster.initialDeployment and persists
+   registered repositories. Manager uses cluster.deployment and persists
    server inventory and provider identity in both scopes.
 7. Mark signup ready and return a safe organization summary plus
    `https://<tenant-host>/auth/`. Bootstrap and deployment credentials, and the
@@ -208,6 +208,6 @@ Managed cluster metadata is stored as manager: { organization_id, host, for }: t
 two values identify the platform, and for is the tenant organization ID. Signup assigns
 these from trusted runtime context and stores the same relationship in both cluster copies.
 name starts as the generated organization ID but is a display label and can be renamed.
-initialDeployment and repositories are top-level cluster configuration. Repository setup
+deployment and repositories are top-level cluster configuration. Repository setup
 populates both arrays before awaiting Manager.createServer. Mesh retains its later
 activation and return-from-zero creation path.
